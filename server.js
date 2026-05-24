@@ -15,24 +15,54 @@ const io = socketIo(server, {
   transports: ['websocket', 'polling']
 });
 
+// Initialize Supabase
 const supabase = createClient(
-  process.env.SUPABASE_URL || 'https://dohiidezhkjcllualhta.supabase.co',
-  process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRvaGlpZGV6aGtqY2xsdWFsaHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyNDczODQsImV4cCI6MjA5NDgyMzM4NH0.EVEhHIzJ1fCNaxlXu-ypm51SnELftLkNPS1ipBzLF_E'
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
 );
+
+// Simple rate limiting (fallback if express-rate-limit not available)
+const rateLimit = new Map();
+function simpleRateLimit(req, res, next) {
+  const ip = req.ip || req.connection.remoteAddress;
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000; // 15 minutes
+  const max = 100;
+  
+  if (!rateLimit.has(ip)) {
+    rateLimit.set(ip, { count: 1, resetTime: now + windowMs });
+    return next();
+  }
+  
+  const record = rateLimit.get(ip);
+  if (now > record.resetTime) {
+    record.count = 1;
+    record.resetTime = now + windowMs;
+    return next();
+  }
+  
+  if (record.count >= max) {
+    return res.status(429).json({ error: 'Too many requests, please try again later.' });
+  }
+  
+  record.count++;
+  next();
+}
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static('.'));
+app.use('/api/', simpleRateLimit);
 
 // ============================================================
 // PERSISTENT STORAGE
 // ============================================================
 const DATA_FILE = path.join(__dirname, 'data.json');
 
-// Initialize data structure
 let telegramChatIds = new Set();
 let emailSubscribers = new Set();
 let userAlerts = new Map();
+let alertHistory = [];
 
 function loadData() {
   try {
@@ -42,12 +72,15 @@ function loadData() {
       telegramChatIds = new Set(parsed.telegramChatIds || []);
       emailSubscribers = new Set(parsed.emailSubscribers || []);
       userAlerts = new Map(Object.entries(parsed.userAlerts || {}));
+      alertHistory = parsed.alertHistory || [];
       console.log(`\n📦 Loaded from disk:`);
       console.log(`   📱 Telegram subscribers : ${telegramChatIds.size}`);
-      console.log(`   📧 Email subscribers    : ${emailSubscribers.size}`);
       console.log(`   🔔 Alert sets           : ${userAlerts.size}\n`);
+      
+      if (telegramChatIds.size > 0) {
+        console.log(`   Subscribers: ${Array.from(telegramChatIds).join(', ')}`);
+      }
     } else {
-      // Create empty data file
       saveData();
       console.log(`📁 Created new data.json file`);
     }
@@ -61,7 +94,8 @@ function saveData() {
     const payload = {
       telegramChatIds: Array.from(telegramChatIds),
       emailSubscribers: Array.from(emailSubscribers),
-      userAlerts: Object.fromEntries(userAlerts)
+      userAlerts: Object.fromEntries(userAlerts),
+      alertHistory: alertHistory.slice(-1000)
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(payload, null, 2));
   } catch (e) {
@@ -69,10 +103,7 @@ function saveData() {
   }
 }
 
-// Load existing data
 loadData();
-
-// Auto-save every minute
 setInterval(saveData, 60000);
 
 // ============================================================
@@ -81,29 +112,61 @@ setInterval(saveData, 60000);
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TG_BASE = BOT_TOKEN ? `https://api.telegram.org/bot${BOT_TOKEN}` : null;
 
-async function tgSend(chatId, text, markdown = false) {
+async function testBotConnection() {
   if (!TG_BASE) {
-    console.error('❌ TELEGRAM_BOT_TOKEN is not set in .env — cannot send message');
+    console.error('❌ TELEGRAM_BOT_TOKEN is not set in .env file!');
+    console.log('   Please add: TELEGRAM_BOT_TOKEN=your_token_here');
     return false;
   }
+  
+  try {
+    const res = await axios.get(`${TG_BASE}/getMe`, { timeout: 10000 });
+    if (res.data.ok) {
+      console.log(`🤖 Telegram Bot connected: @${res.data.result.username}`);
+      return true;
+    } else {
+      console.error('❌ Telegram bot connection failed:', res.data);
+      return false;
+    }
+  } catch (err) {
+    console.error('❌ Cannot connect to Telegram API:', err.message);
+    return false;
+  }
+}
+
+async function tgSend(chatId, text, markdown = false, retryCount = 0) {
+  if (!TG_BASE) {
+    console.error('❌ TELEGRAM_BOT_TOKEN not set');
+    return false;
+  }
+  
   try {
     const body = { chat_id: chatId, text };
     if (markdown) body.parse_mode = 'Markdown';
-    const res = await axios.post(`${TG_BASE}/sendMessage`, body, { timeout: 10000 });
+    const res = await axios.post(`${TG_BASE}/sendMessage`, body, { timeout: 15000 });
+    
     if (res.data.ok) {
-      console.log(`✅ Telegram → chatId ${chatId} — OK`);
+      console.log(`✅ Telegram sent to ${chatId}`);
       return true;
     } else {
-      console.error(`❌ Telegram API error → chatId ${chatId}:`, res.data);
+      console.error(`❌ Telegram API error:`, res.data);
       return false;
     }
   } catch (err) {
     const detail = err.response?.data || err.message;
-    console.error(`❌ Telegram send FAILED → chatId ${chatId}:`, detail);
+    console.error(`❌ Telegram send FAILED to ${chatId}:`, detail);
+    
     if (err.response?.data?.error_code === 403) {
-      console.log(`   ↳ User ${chatId} blocked the bot — removing from subscribers`);
+      console.log(`   ↳ User ${chatId} blocked the bot — removing`);
       telegramChatIds.delete(chatId);
       saveData();
+      return false;
+    }
+    
+    if (retryCount < 3) {
+      console.log(`   ↳ Retrying in ${(retryCount + 1) * 2}s...`);
+      await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 2000));
+      return tgSend(chatId, text, markdown, retryCount + 1);
     }
     return false;
   }
@@ -111,15 +174,20 @@ async function tgSend(chatId, text, markdown = false) {
 
 async function tgBroadcast(text, markdown = false) {
   if (telegramChatIds.size === 0) {
-    console.warn('⚠️ No Telegram subscribers. Send /start to @Crypto0_flowbot first!');
+    console.warn('⚠️ No Telegram subscribers!');
     return 0;
   }
+  
+  console.log(`📢 Broadcasting to ${telegramChatIds.size} subscribers...`);
   let sent = 0;
+  
   for (const chatId of telegramChatIds) {
     const ok = await tgSend(chatId, text, markdown);
     if (ok) sent++;
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
-  console.log(`📢 Broadcast sent to ${sent}/${telegramChatIds.size} subscribers`);
+  
+  console.log(`✅ Sent to ${sent}/${telegramChatIds.size} subscribers`);
   return sent;
 }
 
@@ -137,7 +205,7 @@ async function pollTelegram() {
   try {
     const url = `${TG_BASE}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`;
     const res = await axios.get(url, { timeout: 35000 });
-    
+
     if (res.data.ok && res.data.result) {
       for (const update of res.data.result) {
         lastUpdateId = update.update_id;
@@ -148,7 +216,7 @@ async function pollTelegram() {
         const text = (msg.text || '').trim().toLowerCase();
         const name = msg.from?.first_name || msg.from?.username || 'there';
 
-        console.log(`📩 Telegram from ${chatId}: "${msg.text}"`);
+        console.log(`📩 Telegram message from ${chatId}: "${msg.text}"`);
 
         if (text === '/start') {
           telegramChatIds.add(chatId);
@@ -156,7 +224,7 @@ async function pollTelegram() {
           console.log(`✅ Subscribed: ${chatId} (${name}) | Total: ${telegramChatIds.size}`);
           await tgSend(chatId,
             `✅ *Welcome to CryptoFlow Alerts, ${name}!*\n\n` +
-            `You are now subscribed to real-time price alerts. 🎯\n\n` +
+            `You are now subscribed to real-time price alerts.\n\n` +
             `*Commands:*\n` +
             `/start — Subscribe\n` +
             `/stop — Unsubscribe\n` +
@@ -172,16 +240,10 @@ async function pollTelegram() {
           await tgSend(chatId, `❌ You have been unsubscribed.\n\nSend /start to re-subscribe.`);
         } else if (text === '/status') {
           const subbed = telegramChatIds.has(chatId);
-          await tgSend(chatId,
-            subbed ? `✅ You ARE subscribed to CryptoFlow alerts!` : `❌ You are NOT subscribed. Send /start to subscribe.`,
-            true
-          );
+          await tgSend(chatId, subbed ? `✅ You ARE subscribed to CryptoFlow alerts!` : `❌ You are NOT subscribed. Send /start to subscribe.`);
         } else if (text === '/test') {
           await tgSend(chatId,
             `🔔 *TEST ALERT — CryptoFlow*\n\n` +
-            `📊 Coin: BTC\n` +
-            `💰 Current Price: $77,500\n` +
-            `🎯 Target: ↑ Above $1\n\n` +
             `✅ Your Telegram notifications are working perfectly!`,
             true
           );
@@ -189,18 +251,14 @@ async function pollTelegram() {
       }
     }
   } catch (err) {
-    // Silently ignore polling errors
+    if (err.code !== 'ECONNABORTED') {
+      console.error('Polling error:', err.message);
+    }
   } finally {
     isPolling = false;
     setTimeout(pollTelegram, 3000);
   }
 }
-
-// Start polling
-setTimeout(() => {
-  console.log('🤖 Starting Telegram polling...');
-  pollTelegram();
-}, 2000);
 
 // ============================================================
 // SEND ALERT NOTIFICATION
@@ -208,14 +266,17 @@ setTimeout(() => {
 async function sendAlertNotification(alert, currentPrice, userId) {
   const symbol = (alert.cryptoName || alert.cryptoId || '???').toUpperCase();
   const direction = alert.type === 'above' ? '📈 ABOVE ↑' : '📉 BELOW ↓';
-  const channels = alert.notificationChannels || ['telegram'];
 
-  console.log(`\n🔔 Sending alert notification:`);
+  console.log(`\n🔔 ========================================`);
+  console.log(`🔔 SENDING ALERT NOTIFICATION`);
+  console.log(`🔔 ========================================`);
   console.log(`   Coin     : ${symbol}`);
   console.log(`   Price    : $${currentPrice.toLocaleString()}`);
-  console.log(`   Target   : ${alert.type} $${alert.targetPrice.toLocaleString()}`);
-  console.log(`   Channels : ${channels.join(', ')}`);
-  console.log(`   TG subs  : ${telegramChatIds.size}`);
+  console.log(`   Target   : $${alert.targetPrice.toLocaleString()}`);
+  console.log(`   Type     : ${alert.type}`);
+  console.log(`   Subscribers: ${telegramChatIds.size}`);
+  console.log(`   Bot Token : ${BOT_TOKEN ? '✅ Set' : '❌ Missing'}`);
+  console.log(`========================================\n`);
 
   const message =
     `🚨 *PRICE ALERT TRIGGERED!*\n\n` +
@@ -226,21 +287,24 @@ async function sendAlertNotification(alert, currentPrice, userId) {
     `\n🕐 ${new Date().toLocaleString()}\n` +
     `\n_CryptoFlow Alerts_`;
 
-  if (channels.includes('telegram')) {
-    if (!BOT_TOKEN) {
-      console.error('   ❌ TELEGRAM_BOT_TOKEN not set in .env');
-    } else if (telegramChatIds.size === 0) {
-      console.error('   ❌ No Telegram subscribers. Send /start to @Crypto0_flowbot');
-    } else {
-      await tgBroadcast(message, true);
-    }
-  }
+  const tgSent = await tgBroadcast(message, true);
+  
+  console.log(`📤 Telegram broadcast result: ${tgSent} sent\n`);
 
-  if (channels.includes('email') && emailSubscribers.size > 0) {
-    console.log(`   📧 Email alert for ${emailSubscribers.size} subscribers`);
-  }
+  alertHistory.unshift({
+    id: Date.now(),
+    symbol,
+    price: currentPrice,
+    targetPrice: alert.targetPrice,
+    type: alert.type,
+    triggeredAt: new Date().toISOString(),
+    userId,
+    telegramSent: tgSent
+  });
+  
+  if (alertHistory.length > 1000) alertHistory.pop();
+  saveData();
 
-  // Always emit for UI update
   io.emit(`alertTriggered_${userId}`, { ...alert, currentPrice });
 }
 
@@ -248,19 +312,26 @@ async function sendAlertNotification(alert, currentPrice, userId) {
 // PRICE MONITORING
 // ============================================================
 let isCheckingAlerts = false;
+let alertCheckCount = 0;
 
 async function checkAlerts() {
   if (isCheckingAlerts) return;
   isCheckingAlerts = true;
+  alertCheckCount++;
 
-  console.log(`\n🔍 Checking alerts... (${new Date().toLocaleTimeString()})`);
-  console.log(`   Total alert sets: ${userAlerts.size}`);
+  if (alertCheckCount % 60 === 0) {
+    console.log(`\n🔍 Checking alerts... (${new Date().toLocaleTimeString()})`);
+    let totalAlerts = 0;
+    for (const alerts of userAlerts.values()) {
+      totalAlerts += alerts.length;
+    }
+    console.log(`   Total alerts: ${totalAlerts}, Subscribers: ${telegramChatIds.size}`);
+  }
 
   for (const [userId, alerts] of userAlerts.entries()) {
     for (let i = 0; i < alerts.length; i++) {
       const alert = alerts[i];
-      
-      // Skip triggered non-recurring alerts
+
       if (alert.triggered && (alert.recurring === 'once' || !alert.recurring)) {
         continue;
       }
@@ -279,16 +350,16 @@ async function checkAlerts() {
         let shouldTrigger = false;
         if (alert.type === 'above' && currentPrice >= alert.targetPrice) {
           shouldTrigger = true;
-          console.log(`   🎯 ABOVE TRIGGER! ${symbol} at $${currentPrice} >= $${alert.targetPrice}`);
+          console.log(`\n🎯 ${symbol} ABOVE TRIGGER! Price: $${currentPrice} >= Target: $${alert.targetPrice}`);
         }
         if (alert.type === 'below' && currentPrice <= alert.targetPrice) {
           shouldTrigger = true;
-          console.log(`   🎯 BELOW TRIGGER! ${symbol} at $${currentPrice} <= $${alert.targetPrice}`);
+          console.log(`\n🎯 ${symbol} BELOW TRIGGER! Price: $${currentPrice} <= Target: $${alert.targetPrice}`);
         }
 
         if (shouldTrigger) {
           const triggeredPrice = currentPrice;
-          
+
           if (alert.recurring === 'once' || !alert.recurring) {
             alert.triggered = true;
             alert.triggeredPrice = triggeredPrice;
@@ -298,10 +369,9 @@ async function checkAlerts() {
           } else {
             console.log(`   🔄 RECURRING ALERT TRIGGERED for ${symbol}!`);
           }
-          
+
           await sendAlertNotification(alert, triggeredPrice, userId);
-          
-          // Handle recurring resets
+
           if (alert.recurring === 'always') {
             alert.triggered = false;
             saveData();
@@ -320,7 +390,7 @@ async function checkAlerts() {
           }
         }
       } catch (err) {
-        // Silent fail for individual coins
+        // Silent fail
       }
     }
   }
@@ -328,7 +398,6 @@ async function checkAlerts() {
   isCheckingAlerts = false;
 }
 
-// Run alert checks every 10 seconds
 setInterval(checkAlerts, 10000);
 
 // ============================================================
@@ -398,23 +467,6 @@ app.post('/api/auth/logout', async (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/auth/reset-password', async (req, res) => {
-  const { email } = req.body;
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: 'http://localhost:3000/update-password.html'
-  });
-  if (error) return res.status(400).json({ error: error.message });
-  res.json({ success: true });
-});
-
-app.post('/api/auth/update-password', async (req, res) => {
-  const { access_token, new_password } = req.body;
-  if (access_token) await supabase.auth.setSession({ access_token, refresh_token: '' });
-  const { error } = await supabase.auth.updateUser({ password: new_password });
-  if (error) return res.status(400).json({ error: error.message });
-  res.json({ success: true });
-});
-
 // ============================================================
 // ALERT ROUTES
 // ============================================================
@@ -428,7 +480,7 @@ app.post('/api/alerts', (req, res) => {
   const newAlert = {
     id: Date.now(),
     ...alert,
-    notificationChannels: alert.notificationChannels || ['telegram'],
+    notificationChannels: ['telegram'],
     createdAt: new Date().toISOString(),
     triggered: false
   };
@@ -436,6 +488,26 @@ app.post('/api/alerts', (req, res) => {
   saveData();
   console.log(`✅ Alert created: ${newAlert.cryptoName} ${newAlert.type} $${newAlert.targetPrice}`);
   res.json(newAlert);
+});
+
+app.put('/api/alerts/:userId/:alertId', (req, res) => {
+  const { userId, alertId } = req.params;
+  const updates = req.body;
+  
+  if (userAlerts.has(userId)) {
+    const alerts = userAlerts.get(userId);
+    const index = alerts.findIndex(a => a.id === parseInt(alertId));
+    
+    if (index !== -1) {
+      alerts[index] = { ...alerts[index], ...updates };
+      saveData();
+      res.json(alerts[index]);
+    } else {
+      res.status(404).json({ error: 'Alert not found' });
+    }
+  } else {
+    res.status(404).json({ error: 'User not found' });
+  }
 });
 
 app.delete('/api/alerts/:userId/:alertId', (req, res) => {
@@ -451,28 +523,15 @@ app.delete('/api/alerts/:userId/:alertId', (req, res) => {
 // NOTIFICATION ROUTES
 // ============================================================
 app.get('/api/notifications/stats', (req, res) => {
-  res.json({ telegram: { active: telegramChatIds.size }, email: { active: emailSubscribers.size } });
-});
-
-app.post('/api/notifications/email/subscribe', (req, res) => {
-  const { email } = req.body;
-  if (!email?.includes('@')) return res.status(400).json({ success: false, message: 'Invalid email' });
-  emailSubscribers.add(email);
-  saveData();
-  res.json({ success: true });
-});
-
-app.post('/api/notifications/email/unsubscribe', (req, res) => {
-  emailSubscribers.delete(req.body.email);
-  saveData();
-  res.json({ success: true });
+  res.json({ telegram: { active: telegramChatIds.size } });
 });
 
 app.post('/api/notifications/test', async (req, res) => {
   const { coin = 'BTC', targetPrice = 100000, currentPrice = 105000, direction = 'above' } = req.body;
 
-  console.log(`\n🧪 Test alert requested`);
+  console.log(`\n🧪 TEST ALERT REQUESTED`);
   console.log(`   Subscribers: ${telegramChatIds.size}`);
+  console.log(`   Bot configured: ${!!BOT_TOKEN}`);
 
   const message =
     `🔔 *TEST ALERT — CryptoFlow*\n\n` +
@@ -482,34 +541,45 @@ app.post('/api/notifications/test', async (req, res) => {
     `✅ Notifications are working!`;
 
   const sent = await tgBroadcast(message, true);
-  res.json({ success: true, telegram: sent, email: emailSubscribers.size });
+  res.json({ success: true, telegram: sent, subscribers: telegramChatIds.size });
 });
 
-// Debug endpoint
 app.get('/api/telegram/status', (req, res) => {
   res.json({
     botTokenConfigured: !!BOT_TOKEN,
     subscribers: Array.from(telegramChatIds),
     subscriberCount: telegramChatIds.size,
-    emailSubscribers: emailSubscribers.size,
     totalAlertSets: userAlerts.size
   });
 });
 
-// Manual trigger endpoint
 app.post('/api/debug/check-now', async (req, res) => {
   console.log('\n🔧 Manual alert check triggered...');
   await checkAlerts();
   res.json({ success: true, message: 'Alert check completed' });
 });
 
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    telegram: !!BOT_TOKEN,
+    subscribers: telegramChatIds.size
+  });
+});
+
 // ============================================================
 // WEBSOCKET
 // ============================================================
 io.on('connection', (socket) => {
-  console.log(`🔌 WebSocket client connected`);
+  console.log(`🔌 WebSocket client connected: ${socket.id}`);
   fetchPrices().then(prices => { if (prices) socket.emit('priceUpdate', prices); });
-  socket.on('disconnect', () => console.log(`🔌 WebSocket client disconnected`));
+  
+  socket.on('subscribeAlerts', (userId) => {
+    socket.join(`user_${userId}`);
+  });
+  
+  socket.on('disconnect', () => console.log(`🔌 WebSocket disconnected: ${socket.id}`));
 });
 
 // ============================================================
@@ -520,21 +590,28 @@ app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'dashboard
 app.get('/alerts', (req, res) => res.sendFile(path.join(__dirname, 'alerts', 'alerts.html')));
 app.get('/risk', (req, res) => res.sendFile(path.join(__dirname, 'risk', 'risk.html')));
 app.get('/settings', (req, res) => res.sendFile(path.join(__dirname, 'settings', 'settings.html')));
-app.get('/update-password', (req, res) => res.sendFile(path.join(__dirname, 'auth', 'update-password.html')));
 
 // ============================================================
 // START SERVER
 // ============================================================
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', async () => {
   console.log(`\n🚀 CryptoFlow server running on http://localhost:${PORT}`);
-  console.log(`🤖 Telegram Bot  : ${BOT_TOKEN ? '✅ Configured' : '❌ Missing'}`);
+  console.log(`🤖 Telegram Bot  : ${BOT_TOKEN ? '✅ Token configured' : '❌ Missing'}`);
   console.log(`📱 TG Subscribers: ${telegramChatIds.size}`);
-  console.log(`📧 Email Subscribers: ${emailSubscribers.size}`);
-  console.log(`🔔 Alert sets: ${userAlerts.size}`);
+  console.log(`🔔 Alert sets    : ${userAlerts.size}`);
+  
+  await testBotConnection();
+  
   console.log(`\n💡 Commands for Telegram bot:`);
   console.log(`   /start  - Subscribe to alerts`);
   console.log(`   /stop   - Unsubscribe`);
   console.log(`   /status - Check subscription`);
-  console.log(`   /test   - Send test alert\n`);
+  console.log(`   /test   - Send test alert`);
+  console.log(`\n⚠️ Make sure you send /start to @Crypto0_flowbot on Telegram!\n`);
+  
+  setTimeout(() => {
+    console.log('🤖 Starting Telegram polling...');
+    pollTelegram();
+  }, 2000);
 });
