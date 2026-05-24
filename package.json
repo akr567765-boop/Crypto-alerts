@@ -1,24 +1,17 @@
 {
-  "name": "crypto-alerts",
+  "name": "cryptoflow-alerts",
   "version": "1.0.0",
-  "description": "Crypto alerts dashboard with real-time prices and Supabase auth",
+  "description": "Crypto price alert system with Telegram bot",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node server.js"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.106.1",
-    "axios": "^1.16.1",
-    "cors": "^2.8.6",
-    "dotenv": "^16.6.1",
-    "express": "^4.22.2",
-    "express-rate-limit": "^8.5.2",
-    "node-telegram-bot-api": "^0.67.0",
-    "nodemailer": "^8.0.7",
-    "socket.io": "^4.8.3"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.1"
+    "axios": "^1.6.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "socket.io": "^4.5.4",
+    "@supabase/supabase-js": "^2.38.0"
   }
 }
