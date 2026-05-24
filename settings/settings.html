@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <title>CryptoFlow | Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --ink-0: #04060b;
+      --ink-1: #080c14;
+      --ink-2: #0d1220;
+      --ink-3: #131a2c;
+      --ink-4: #1a2438;
+      --glass: rgba(255,255,255,0.028);
+      --glass-2: rgba(255,255,255,0.052);
+      --border: rgba(255,255,255,0.068);
+      --border-2: rgba(255,255,255,0.11);
+      --jade: #00e87a;
+      --jade-pale: rgba(0,232,122,0.06);
+      --jade-ring: rgba(0,232,122,0.12);
+      --crimson: #ff3d5a;
+      --t0: #ffffff;
+      --t1: #e8edf8;
+      --t2: #8896b0;
+      --t3: #4a5672;
+      --t4: #2a3248;
+      --serif: 'Instrument Serif', serif;
+      --sans: 'Geist', sans-serif;
+      --mono: 'Geist Mono', monospace;
+      --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    body {
+      background: var(--ink-0);
+      font-family: var(--sans);
+      color: var(--t1);
+      min-height: 100vh;
+      padding-bottom: 80px;
+      overflow-x: hidden;
+    }
+
+    .canvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+    .canvas-noise {
+      position: absolute; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      background-size: 256px; opacity: 0.55;
+    }
+    .canvas-aurora {
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 60% 50% at 10% 20%, rgba(0,232,122,0.05) 0%, transparent 65%),
+                  radial-gradient(ellipse 50% 40% at 90% 70%, rgba(56,190,255,0.04) 0%, transparent 60%);
+      animation: aurora 22s ease-in-out infinite alternate;
+    }
+    @keyframes aurora {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.65; transform: scale(1.05) translateY(-15px); }
+      100% { opacity: 1; transform: scale(0.97) translateY(8px); }
+    }
+    .canvas-lines {
+      position: absolute; inset: 0;
+      background-image: linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+      background-size: 56px 56px;
+      mask-image: radial-gradient(ellipse 90% 80% at 50% 30%, black 10%, transparent 100%);
+    }
+
+    .header {
+      position: sticky; top: 0; z-index: 200;
+      background: rgba(4,6,11,0.82);
+      backdrop-filter: blur(40px);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-inner {
+      max-width: 1200px; margin: 0 auto;
+      padding: 0 24px; height: 58px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .logo-mark { width: 32px; height: 32px; }
+    .logo-mark svg { width: 100%; height: 100%; }
+    .logo-text { font-family: var(--serif); font-size: 20px; color: var(--t0); }
+    .live-badge {
+      display: flex; align-items: center; gap: 5px;
+      padding: 4px 10px;
+      background: rgba(0,232,122,0.06);
+      border: 1px solid rgba(0,232,122,0.15);
+      border-radius: 20px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--jade);
+    }
+    .live-dot {
+      width: 5px; height: 5px;
+      background: var(--jade);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--jade);
+      animation: livePulse 2s ease-in-out infinite;
+    }
+    @keyframes livePulse {
+      0%,100% { opacity:1; transform:scale(1); }
+      50% { opacity:0.5; transform:scale(0.75); }
+    }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .avatar {
+      width: 30px; height: 30px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--jade), #00c96a);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 12px; color: #000; cursor: pointer;
+    }
+    .btn-exit {
+      height: 30px; padding: 0 12px;
+      background: transparent;
+      border: 1px solid rgba(255,61,90,0.2);
+      border-radius: 7px;
+      color: var(--crimson);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s;
+    }
+    .btn-exit:hover { background: rgba(255,61,90,0.08); border-color: rgba(255,61,90,0.4); }
+
+    .main { max-width: 560px; margin: 0 auto; padding: 28px 20px 0; position: relative; z-index: 1; }
+
+    .page-hd { margin-bottom: 28px; animation: fadeUp 0.5s var(--ease-smooth) both; }
+    .page-eyebrow {
+      font-family: var(--mono); font-size: 10px; color: var(--jade);
+      letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px;
+    }
+    .page-title {
+      font-family: var(--serif); font-size: clamp(26px, 6vw, 36px);
+      color: var(--t0); line-height: 1.1; letter-spacing: -0.4px;
+    }
+    .page-title em { font-style: italic; color: var(--jade); }
+
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(14px); }
+      to { opacity:1; transform:translateY(0); }
+    }
+
+    .settings-card {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      overflow: hidden;
+      margin-bottom: 16px;
+      animation: fadeUp 0.5s var(--ease-smooth) both;
+    }
+    .card-header {
+      padding: 20px 22px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-title {
+      font-family: var(--serif);
+      font-size: 20px;
+      color: var(--t0);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-title i {
+      font-size: 18px;
+      color: var(--jade);
+    }
+    .card-content {
+      padding: 20px 22px;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .info-row:last-child {
+      border-bottom: none;
+    }
+    .info-label {
+      font-size: 14px;
+      color: var(--t2);
+    }
+    .info-value {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--t1);
+    }
+    .info-value.email {
+      color: var(--jade);
+    }
+
+    .telegram-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 20px;
+      background: var(--jade-pale);
+      border: 1px solid var(--jade-ring);
+      border-radius: 12px;
+      color: var(--jade);
+      text-decoration: none;
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s;
+      margin-top: 8px;
+    }
+    .telegram-btn:hover {
+      background: rgba(0,232,122,0.12);
+      transform: translateX(4px);
+    }
+
+    .logout-btn {
+      width: 100%;
+      padding: 14px;
+      background: rgba(255,61,90,0.08);
+      border: 1px solid rgba(255,61,90,0.2);
+      border-radius: 12px;
+      color: var(--crimson);
+      font-family: var(--sans);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+      margin-top: 8px;
+    }
+    .logout-btn:hover {
+      background: rgba(255,61,90,0.15);
+      border-color: rgba(255,61,90,0.35);
+    }
+
+    .version-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      background: var(--glass-2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--t3);
+    }
+
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0; height: 64px;
+      background: rgba(4,6,11,0.95); backdrop-filter: blur(32px);
+      border-top: 1px solid var(--border); display: flex; z-index: 200;
+    }
+    .nav-item {
+      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 4px; color: var(--t4); text-decoration: none;
+      font-size: 9.5px; font-weight: 500; transition: color 0.2s; position: relative;
+    }
+    .nav-item i { font-size: 17px; }
+    .nav-item.active { color: var(--jade); }
+    .nav-item.active::before {
+      content: ''; position: absolute; top: 0;
+      width: 24px; height: 2px; background: var(--jade);
+      border-radius: 0 0 3px 3px;
+    }
+
+    .toast {
+      position: fixed; bottom: 80px; left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      background: var(--ink-4); border: 1px solid var(--border-2);
+      border-radius: 10px; padding: 10px 18px;
+      font-size: 13px; color: var(--t1);
+      z-index: 99999; opacity: 0; transition: all 0.28s;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    @media (max-width: 480px) {
+      .main { padding: 20px 14px 0; }
+      .info-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="canvas">
+    <div class="canvas-noise"></div>
+    <div class="canvas-aurora"></div>
+    <div class="canvas-lines"></div>
+  </div>
+
+  <header class="header">
+    <div class="header-inner">
+      <a class="logo" href="/dashboard">
+        <div class="logo-mark">
+          <svg viewBox="0 0 32 32" fill="none">
+            <rect width="32" height="32" rx="9" fill="url(#lg)"/>
+            <path d="M16 6L7 12.5V19.5L16 26L25 19.5V12.5L16 6Z" stroke="#000" stroke-width="1.4"/>
+            <path d="M16 6L16 26M7 12.5L25 12.5" stroke="#000" stroke-width="1.4"/>
+            <defs>
+              <linearGradient id="lg" x1="0" y1="0" x2="32" y2="32">
+                <stop stop-color="#00e87a"/><stop offset="1" stop-color="#00b85f"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <span class="logo-text">CryptoFlow</span>
+      </a>
+      <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+      <div class="header-right">
+        <div class="avatar" id="avatarEl">T</div>
+        <button class="btn-exit" onclick="logout()"><i class="fas fa-power-off"></i> Exit</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="page-hd">
+      <div class="page-eyebrow">Preferences</div>
+      <h1 class="page-title"><em>Settings</em></h1>
+    </div>
+
+    <!-- Account Settings -->
+    <div class="settings-card">
+      <div class="card-header">
+        <div class="card-title">
+          <i class="fas fa-user-circle"></i>
+          Account
+        </div>
+      </div>
+      <div class="card-content">
+        <div class="info-row">
+          <span class="info-label">Email</span>
+          <span class="info-value email" id="userEmail">—</span>
+        </div>
+        <button class="logout-btn" onclick="logout()">
+          <i class="fas fa-sign-out-alt"></i> Logout
+        </button>
+      </div>
+    </div>
+
+    <!-- Telegram Settings -->
+    <div class="settings-card">
+      <div class="card-header">
+        <div class="card-title">
+          <i class="fab fa-telegram"></i>
+          Telegram Alerts
+        </div>
+      </div>
+      <div class="card-content">
+        <div class="info-row">
+          <span class="info-label">Bot Username</span>
+          <span class="info-value">@Crypto0_flowbot</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Status</span>
+          <span class="info-value" id="telegramStatus">Checking...</span>
+        </div>
+        <a href="https://t.me/Crypto0_flowbot" target="_blank" class="telegram-btn">
+          <i class="fab fa-telegram"></i>
+          Open Bot
+          <i class="fas fa-arrow-up-right-from-square" style="font-size: 10px;"></i>
+        </a>
+      </div>
+    </div>
+
+    <!-- About -->
+    <div class="settings-card">
+      <div class="card-header">
+        <div class="card-title">
+          <i class="fas fa-info-circle"></i>
+          About
+        </div>
+      </div>
+      <div class="card-content">
+        <div class="info-row">
+          <span class="info-label">Version</span>
+          <span class="info-value">2.0.0</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Build Date</span>
+          <span class="info-value">May 24, 2025</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <nav class="bottom-nav">
+    <a href="/dashboard" class="nav-item"><i class="fas fa-home"></i><span>Home</span></a>
+    <a href="/alerts" class="nav-item"><i class="fas fa-bell"></i><span>Alerts</span></a>
+    <a href="/risk" class="nav-item"><i class="fas fa-shield-alt"></i><span>Risk</span></a>
+    <a href="/settings" class="nav-item active"><i class="fas fa-sliders-h"></i><span>Settings</span></a>
+  </nav>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (!user.id && !localStorage.getItem('access_token')) window.location.href = '/';
+    
+    const username = user.email?.split('@')[0] || user.user_metadata?.username || 'Trader';
+    document.getElementById('avatarEl').textContent = username[0].toUpperCase();
+    document.getElementById('userEmail').textContent = user.email || '—';
+
+    async function checkTelegramStatus() {
+      try {
+        const res = await fetch('/api/telegram/status');
+        const data = await res.json();
+        const statusEl = document.getElementById('telegramStatus');
+        if (data.subscriberCount > 0) {
+          statusEl.innerHTML = `<span style="color: var(--jade);">✓ Subscribed (${data.subscriberCount} active)</span>`;
+        } else {
+          statusEl.innerHTML = `<span style="color: var(--t3);">⚠ Not subscribed — click "Open Bot" and send /start</span>`;
+        }
+      } catch(e) {
+        document.getElementById('telegramStatus').innerHTML = `<span style="color: var(--t3);">Could not check status</span>`;
+      }
+    }
+
+    let toastTimer;
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+    }
+
+    window.logout = async () => {
+      try { 
+        await fetch('/api/auth/logout', { method: 'POST' }); 
+        showToast('Logged out successfully');
+        setTimeout(() => {
+          localStorage.clear();
+          window.location.href = '/';
+        }, 500);
+      } catch(e) { 
+        localStorage.clear();
+        window.location.href = '/';
+      }
+    };
+
+    checkTelegramStatus();
+    setInterval(checkTelegramStatus, 30000);
+  </script>
+</body>
+</html>

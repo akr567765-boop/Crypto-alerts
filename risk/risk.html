@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <title>CryptoFlow | Position Calculator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --ink-0: #04060b;
+      --ink-1: #080c14;
+      --ink-2: #0d1220;
+      --ink-3: #131a2c;
+      --ink-4: #1a2438;
+      --glass: rgba(255,255,255,0.028);
+      --glass-2: rgba(255,255,255,0.052);
+      --border: rgba(255,255,255,0.068);
+      --border-2: rgba(255,255,255,0.11);
+      --jade: #00e87a;
+      --jade-pale: rgba(0,232,122,0.06);
+      --jade-ring: rgba(0,232,122,0.12);
+      --crimson: #ff3d5a;
+      --amber: #f5a623;
+      --sky: #38beff;
+      --t0: #ffffff;
+      --t1: #e8edf8;
+      --t2: #8896b0;
+      --t3: #4a5672;
+      --t4: #2a3248;
+      --serif: 'Instrument Serif', serif;
+      --sans: 'Geist', sans-serif;
+      --mono: 'Geist Mono', monospace;
+      --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    body {
+      background: var(--ink-0);
+      font-family: var(--sans);
+      color: var(--t1);
+      min-height: 100vh;
+      padding-bottom: 80px;
+      overflow-x: hidden;
+    }
+
+    .canvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+    .canvas-noise {
+      position: absolute; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      background-size: 256px; opacity: 0.55;
+    }
+    .canvas-aurora {
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 60% 50% at 10% 20%, rgba(0,232,122,0.05) 0%, transparent 65%),
+                  radial-gradient(ellipse 50% 40% at 90% 70%, rgba(56,190,255,0.04) 0%, transparent 60%);
+      animation: aurora 22s ease-in-out infinite alternate;
+    }
+    @keyframes aurora {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.65; transform: scale(1.05) translateY(-15px); }
+      100% { opacity: 1; transform: scale(0.97) translateY(8px); }
+    }
+    .canvas-lines {
+      position: absolute; inset: 0;
+      background-image: linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+      background-size: 56px 56px;
+      mask-image: radial-gradient(ellipse 90% 80% at 50% 30%, black 10%, transparent 100%);
+    }
+
+    .header {
+      position: sticky; top: 0; z-index: 200;
+      background: rgba(4,6,11,0.82);
+      backdrop-filter: blur(40px);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-inner {
+      max-width: 1200px; margin: 0 auto;
+      padding: 0 24px; height: 58px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .logo-mark { width: 32px; height: 32px; }
+    .logo-mark svg { width: 100%; height: 100%; }
+    .logo-text { font-family: var(--serif); font-size: 20px; color: var(--t0); }
+    .live-badge {
+      display: flex; align-items: center; gap: 5px;
+      padding: 4px 10px;
+      background: rgba(0,232,122,0.06);
+      border: 1px solid rgba(0,232,122,0.15);
+      border-radius: 20px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--jade);
+    }
+    .live-dot {
+      width: 5px; height: 5px;
+      background: var(--jade);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--jade);
+      animation: livePulse 2s ease-in-out infinite;
+    }
+    @keyframes livePulse {
+      0%,100% { opacity:1; transform:scale(1); }
+      50% { opacity:0.5; transform:scale(0.75); }
+    }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .avatar {
+      width: 30px; height: 30px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--jade), #00c96a);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 12px; color: #000; cursor: pointer;
+    }
+    .btn-exit {
+      height: 30px; padding: 0 12px;
+      background: transparent;
+      border: 1px solid rgba(255,61,90,0.2);
+      border-radius: 7px;
+      color: var(--crimson);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s;
+    }
+    .btn-exit:hover { background: rgba(255,61,90,0.08); border-color: rgba(255,61,90,0.4); }
+
+    .main { max-width: 560px; margin: 0 auto; padding: 28px 20px 0; position: relative; z-index: 1; }
+
+    .page-hd { margin-bottom: 28px; animation: fadeUp 0.5s var(--ease-smooth) both; }
+    .page-eyebrow {
+      font-family: var(--mono); font-size: 10px; color: var(--jade);
+      letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px;
+    }
+    .page-title {
+      font-family: var(--serif); font-size: clamp(26px, 6vw, 36px);
+      color: var(--t0); line-height: 1.1; letter-spacing: -0.4px;
+    }
+    .page-title em { font-style: italic; color: var(--jade); }
+
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(14px); }
+      to { opacity:1; transform:translateY(0); }
+    }
+
+    .card {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      overflow: hidden;
+      margin-bottom: 16px;
+      animation: fadeUp 0.5s var(--ease-smooth) both;
+    }
+    .card-pad { padding: 22px; }
+
+    .asset-tabs {
+      display: flex; gap: 4px; padding: 6px;
+      background: var(--ink-2);
+      border-bottom: 1px solid var(--border);
+    }
+    .asset-tab {
+      flex: 1; padding: 10px 8px;
+      border-radius: 12px;
+      background: transparent;
+      border: none;
+      color: var(--t3);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.22s;
+    }
+    .asset-tab:hover { color: var(--t1); background: var(--glass); }
+    .asset-tab.active {
+      background: var(--jade);
+      color: #000;
+      font-weight: 700;
+      box-shadow: 0 4px 16px rgba(0,232,122,0.25);
+    }
+
+    .coin-row, .forex-pair-row, .stock-row {
+      display: flex; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    .coin-chip, .forex-chip, .stock-chip {
+      padding: 7px 14px;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 30px;
+      color: var(--t2);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .coin-chip:hover, .forex-chip:hover, .stock-chip:hover { border-color: var(--border-2); color: var(--t1); }
+    .coin-chip.active, .forex-chip.active, .stock-chip.active {
+      border-color: var(--jade);
+      background: var(--jade-pale);
+      color: var(--jade);
+    }
+
+    .price-banner {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 13px 16px;
+      background: var(--jade-pale);
+      border: 1px solid var(--jade-ring);
+      border-radius: 12px;
+      margin-bottom: 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .price-banner:hover { background: rgba(0,232,122,0.09); }
+    .price-banner-left { display: flex; align-items: center; gap: 10px; }
+    .price-check {
+      width: 20px; height: 20px; border-radius: 5px;
+      background: var(--jade);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .price-check i { font-size: 10px; color: #000; }
+    .price-check.off { background: var(--glass-2); border: 1px solid var(--border); }
+    .price-check.off i { color: var(--t3); }
+    .price-label { font-size: 13px; font-weight: 500; color: var(--t1); }
+    .price-value {
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 500;
+      color: var(--jade);
+    }
+    .price-updating { font-family: var(--mono); font-size: 10px; color: var(--t3); margin-top: 1px; }
+
+    .sec-label {
+      font-family: var(--mono); font-size: 10px;
+      color: var(--t3); text-transform: uppercase;
+      letter-spacing: 0.8px; margin-bottom: 8px;
+    }
+    .field { margin-bottom: 16px; }
+    .input-wrap { position: relative; }
+    .input-prefix, .input-suffix {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      font-family: var(--mono); font-size: 13px; color: var(--t3);
+      pointer-events: none;
+    }
+    .input-prefix { left: 14px; }
+    .input-suffix { right: 14px; }
+    .field-input {
+      width: 100%; padding: 13px 14px;
+      background: var(--ink-3);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--t1);
+      font-family: var(--mono);
+      font-size: 15px;
+      font-weight: 500;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .field-input:focus {
+      border-color: var(--jade);
+      box-shadow: 0 0 0 3px rgba(0,232,122,0.08);
+    }
+    .field-input.has-prefix { padding-left: 30px; }
+    .field-input.has-suffix { padding-right: 36px; }
+    .field-select {
+      width: 100%; padding: 13px 14px;
+      background: var(--ink-3);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--t1);
+      font-family: var(--mono);
+      font-size: 14px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .risk-row { display: flex; align-items: center; gap: 12px; }
+    .risk-input-wrap { width: 90px; flex-shrink: 0; }
+    .slider-wrap { flex: 1; }
+    input[type=range] {
+      -webkit-appearance: none; width: 100%; height: 4px;
+      background: var(--ink-4); border-radius: 2px; outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+      background: var(--jade); cursor: pointer;
+    }
+    .risk-presets { display: flex; gap: 6px; margin-top: 10px; }
+    .risk-preset {
+      flex: 1; padding: 5px 0;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--t3);
+      font-family: var(--mono);
+      font-size: 10px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.18s;
+    }
+    .risk-preset:hover { border-color: var(--jade); color: var(--jade); }
+    .risk-preset.active { background: var(--jade-pale); border-color: var(--jade); color: var(--jade); }
+
+    .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+    .btn-calc {
+      width: 100%; padding: 15px;
+      background: var(--jade);
+      border: none;
+      border-radius: 14px;
+      color: #000;
+      font-weight: 700;
+      font-size: 15px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.25s;
+    }
+    .btn-calc:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,232,122,0.4); }
+
+    .results-card {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      overflow: hidden;
+      margin-bottom: 16px;
+      animation: fadeUp 0.5s var(--ease-smooth) 0.1s both;
+    }
+    .result-hero {
+      padding: 28px 24px 22px;
+      background: linear-gradient(135deg, rgba(0,232,122,0.05) 0%, transparent 60%);
+      border-bottom: 1px solid var(--border);
+      text-align: center;
+    }
+    .result-hero-label {
+      font-family: var(--mono); font-size: 10px; color: var(--t3);
+      text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 10px;
+    }
+    .result-hero-num {
+      font-family: var(--mono); font-size: 48px; font-weight: 500;
+      color: var(--jade); letter-spacing: -2px; line-height: 1;
+    }
+    .result-hero-usd {
+      font-family: var(--mono); font-size: 15px; color: var(--t2);
+      margin-top: 6px;
+    }
+    .result-metrics {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 1px; background: var(--border);
+    }
+    .result-metric {
+      padding: 16px 14px;
+      background: var(--ink-2);
+      display: flex; flex-direction: column; gap: 5px;
+    }
+    .rm-label { font-family: var(--mono); font-size: 9px; color: var(--t3); text-transform: uppercase; }
+    .rm-val { font-family: var(--mono); font-size: 17px; font-weight: 500; color: var(--t1); }
+    .rm-val.red { color: var(--crimson); }
+    .rm-val.amber { color: var(--amber); }
+    .rm-val.jade { color: var(--jade); }
+
+    .rr-section { padding: 18px 22px; border-top: 1px solid var(--border); }
+    .rr-title { font-family: var(--mono); font-size: 10px; color: var(--t3); text-transform: uppercase; margin-bottom: 10px; }
+    .rr-bar-wrap {
+      height: 6px; background: var(--ink-4); border-radius: 3px; overflow: hidden; margin-bottom: 8px;
+    }
+    .rr-bar-risk {
+      height: 100%; border-radius: 3px;
+      background: linear-gradient(90deg, var(--crimson), rgba(255,61,90,0.5));
+      transition: width 0.6s;
+    }
+    .rr-bar-reward {
+      height: 100%; border-radius: 3px;
+      background: linear-gradient(90deg, var(--jade), rgba(0,232,122,0.5));
+      transition: width 0.6s;
+      margin-top: 4px;
+    }
+    .rr-labels {
+      display: flex; justify-content: space-between;
+      font-family: var(--mono); font-size: 10px; color: var(--t3);
+    }
+
+    .trade-summary { padding: 18px 22px; border-top: 1px solid var(--border); }
+    .trade-row {
+      display: flex; justify-content: space-between;
+      padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .trade-row:last-child { border-bottom: none; }
+    .trade-key { font-size: 12px; color: var(--t3); }
+    .trade-val { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--t1); }
+
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0; height: 64px;
+      background: rgba(4,6,11,0.95); backdrop-filter: blur(32px);
+      border-top: 1px solid var(--border); display: flex; z-index: 200;
+    }
+    .nav-item {
+      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 4px; color: var(--t4); text-decoration: none;
+      font-size: 9.5px; font-weight: 500; transition: color 0.2s; position: relative;
+    }
+    .nav-item i { font-size: 17px; }
+    .nav-item.active { color: var(--jade); }
+    .nav-item.active::before {
+      content: ''; position: absolute; top: 0;
+      width: 24px; height: 2px; background: var(--jade);
+      border-radius: 0 0 3px 3px;
+    }
+
+    .toast {
+      position: fixed; bottom: 80px; left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      background: var(--ink-4); border: 1px solid var(--border-2);
+      border-radius: 10px; padding: 10px 18px;
+      font-size: 13px; color: var(--t1);
+      z-index: 99999; opacity: 0; transition: all 0.28s;
+      pointer-events: none; white-space: nowrap;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    @media (max-width: 480px) {
+      .main { padding: 20px 14px 0; }
+      .result-hero-num { font-size: 38px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="canvas">
+    <div class="canvas-noise"></div>
+    <div class="canvas-aurora"></div>
+    <div class="canvas-lines"></div>
+  </div>
+
+  <header class="header">
+    <div class="header-inner">
+      <a class="logo" href="/dashboard">
+        <div class="logo-mark">
+          <svg viewBox="0 0 32 32" fill="none">
+            <rect width="32" height="32" rx="9" fill="url(#lg)"/>
+            <path d="M16 6L7 12.5V19.5L16 26L25 19.5V12.5L16 6Z" stroke="#000" stroke-width="1.4"/>
+            <path d="M16 6L16 26M7 12.5L25 12.5" stroke="#000" stroke-width="1.4"/>
+            <defs>
+              <linearGradient id="lg" x1="0" y1="0" x2="32" y2="32">
+                <stop stop-color="#00e87a"/><stop offset="1" stop-color="#00b85f"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <span class="logo-text">CryptoFlow</span>
+      </a>
+      <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+      <div class="header-right">
+        <div class="avatar" id="avatarEl">T</div>
+        <button class="btn-exit" onclick="logout()"><i class="fas fa-power-off"></i> Exit</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="page-hd">
+      <div class="page-eyebrow">Risk Management</div>
+      <h1 class="page-title">Position <em>Calculator</em></h1>
+    </div>
+
+    <div class="card">
+      <div class="asset-tabs">
+        <button class="asset-tab active" data-market="crypto" onclick="switchMarket('crypto',this)">
+          <i class="fab fa-bitcoin"></i> Crypto
+        </button>
+        <button class="asset-tab" data-market="forex" onclick="switchMarket('forex',this)">
+          <i class="fas fa-chart-line"></i> Forex
+        </button>
+        <button class="asset-tab" data-market="stocks" onclick="switchMarket('stocks',this)">
+          <i class="fas fa-building"></i> Stocks
+        </button>
+      </div>
+
+      <div class="card-pad">
+        <!-- Crypto Section -->
+        <div id="cryptoSec">
+          <div class="coin-row">
+            <button class="coin-chip active" data-sym="BTC" onclick="selectCrypto('BTC',this)">BTC</button>
+            <button class="coin-chip" data-sym="ETH" onclick="selectCrypto('ETH',this)">ETH</button>
+            <button class="coin-chip" data-sym="SOL" onclick="selectCrypto('SOL',this)">SOL</button>
+            <button class="coin-chip" data-sym="BNB" onclick="selectCrypto('BNB',this)">BNB</button>
+            <button class="coin-chip" data-sym="XRP" onclick="selectCrypto('XRP',this)">XRP</button>
+            <button class="coin-chip" data-sym="ADA" onclick="selectCrypto('ADA',this)">ADA</button>
+            <button class="coin-chip" data-sym="DOGE" onclick="selectCrypto('DOGE',this)">DOGE</button>
+            <button class="coin-chip" data-sym="custom" onclick="selectCrypto('custom',this)">Custom</button>
+          </div>
+          <div class="price-banner" id="priceBanner" onclick="toggleLivePrice()">
+            <div class="price-banner-left">
+              <div class="price-check" id="priceCheck"><i class="fas fa-check"></i></div>
+              <div>
+                <div class="price-label">Use live price</div>
+                <div class="price-updating" id="priceUpdating">Fetching price...</div>
+              </div>
+            </div>
+            <div class="price-value" id="livePriceDisplay">$—</div>
+          </div>
+        </div>
+
+        <!-- Forex Section (hidden by default) -->
+        <div id="forexSec" style="display:none;">
+          <div class="forex-pair-row">
+            <button class="forex-chip active" data-pair="EURUSD" onclick="selectForex('EURUSD',this)">EUR/USD</button>
+            <button class="forex-chip" data-pair="GBPUSD" onclick="selectForex('GBPUSD',this)">GBP/USD</button>
+            <button class="forex-chip" data-pair="USDJPY" onclick="selectForex('USDJPY',this)">USD/JPY</button>
+            <button class="forex-chip" data-pair="AUDUSD" onclick="selectForex('AUDUSD',this)">AUD/USD</button>
+            <button class="forex-chip" data-pair="USDCAD" onclick="selectForex('USDCAD',this)">USD/CAD</button>
+            <button class="forex-chip" data-pair="NZDUSD" onclick="selectForex('NZDUSD',this)">NZD/USD</button>
+            <button class="forex-chip" data-pair="USDCHF" onclick="selectForex('USDCHF',this)">USD/CHF</button>
+          </div>
+          <div class="field">
+            <div class="sec-label">Lot Size Type</div>
+            <select class="field-select" id="lotType">
+              <option value="standard">Standard Lot (100,000 units)</option>
+              <option value="mini">Mini Lot (10,000 units)</option>
+              <option value="micro">Micro Lot (1,000 units)</option>
+              <option value="custom">Custom Units</option>
+            </select>
+          </div>
+          <div class="field" id="customUnitsField" style="display:none;">
+            <div class="sec-label">Custom Units</div>
+            <input type="number" class="field-input" id="customUnits" placeholder="Enter units">
+          </div>
+          <div class="price-banner" style="opacity:0.5; cursor:default;">
+            <div class="price-banner-left">
+              <div class="price-check off"><i class="fas fa-info"></i></div>
+              <div>
+                <div class="price-label">Forex pairs</div>
+                <div class="price-updating">Enter price manually</div>
+              </div>
+            </div>
+            <div class="price-value">Manual entry</div>
+          </div>
+        </div>
+
+        <!-- Stocks Section (hidden by default) -->
+        <div id="stocksSec" style="display:none;">
+          <div class="stock-row">
+            <button class="stock-chip active" data-stock="AAPL" onclick="selectStock('AAPL',this)">AAPL</button>
+            <button class="stock-chip" data-stock="GOOGL" onclick="selectStock('GOOGL',this)">GOOGL</button>
+            <button class="stock-chip" data-stock="MSFT" onclick="selectStock('MSFT',this)">MSFT</button>
+            <button class="stock-chip" data-stock="AMZN" onclick="selectStock('AMZN',this)">AMZN</button>
+            <button class="stock-chip" data-stock="TSLA" onclick="selectStock('TSLA',this)">TSLA</button>
+            <button class="stock-chip" data-stock="NVDA" onclick="selectStock('NVDA',this)">NVDA</button>
+            <button class="stock-chip" data-stock="META" onclick="selectStock('META',this)">META</button>
+          </div>
+          <div class="price-banner" onclick="toggleStockLivePrice()" style="cursor:pointer;">
+            <div class="price-banner-left">
+              <div class="price-check" id="stockPriceCheck"><i class="fas fa-check"></i></div>
+              <div>
+                <div class="price-label">Use live price</div>
+                <div class="price-updating" id="stockPriceUpdating">Fetching price...</div>
+              </div>
+            </div>
+            <div class="price-value" id="stockLivePriceDisplay">$—</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="sec-label">Account Balance ($)</div>
+          <div class="input-wrap">
+            <span class="input-prefix">$</span>
+            <input type="number" class="field-input has-prefix" id="accountBalance" value="10000">
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="sec-label">Risk Per Trade</div>
+          <div class="risk-row">
+            <div class="risk-input-wrap input-wrap">
+              <input type="number" class="field-input has-suffix" id="riskPercent" value="2" step="0.1">
+              <span class="input-suffix">%</span>
+            </div>
+            <div class="slider-wrap">
+              <input type="range" id="riskSlider" min="0.1" max="20" step="0.1" value="2">
+            </div>
+          </div>
+          <div class="risk-presets">
+            <button class="risk-preset" onclick="setRisk(0.5)">0.5%</button>
+            <button class="risk-preset" onclick="setRisk(1)">1%</button>
+            <button class="risk-preset active" onclick="setRisk(2)">2%</button>
+            <button class="risk-preset" onclick="setRisk(3)">3%</button>
+            <button class="risk-preset" onclick="setRisk(5)">5%</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="sec-label" id="entryLabel">Entry Price</div>
+          <div class="input-wrap">
+            <span class="input-prefix" id="entryPrefix">$</span>
+            <input type="number" class="field-input has-prefix" id="entryPrice" placeholder="0.00" step="any">
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="sec-label" id="slLabel">Stop Loss</div>
+          <div class="input-wrap">
+            <span class="input-prefix" id="slPrefix">$</span>
+            <input type="number" class="field-input has-prefix" id="stopLoss" placeholder="0.00" step="any">
+          </div>
+          <div id="slHelper" style="font-size:10px; color:var(--t4); margin-top:4px;"></div>
+        </div>
+
+        <div class="field">
+          <div class="sec-label" id="tpLabel">Take Profit <span style="color:var(--t4);">(optional)</span></div>
+          <div class="input-wrap">
+            <span class="input-prefix" id="tpPrefix">$</span>
+            <input type="number" class="field-input has-prefix" id="takeProfit" placeholder="0.00" step="any">
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <button class="btn-calc" onclick="calculate()">
+          <i class="fas fa-calculator"></i> Calculate Position
+        </button>
+      </div>
+    </div>
+
+    <div class="results-card" id="resultsCard">
+      <div class="result-hero">
+        <div class="result-hero-label" id="posSizeLabel">Position Size</div>
+        <div class="result-hero-num" id="posSize">0.000000</div>
+        <div class="result-hero-usd" id="posUsd">≈ $0.00 position value</div>
+      </div>
+
+      <div class="result-metrics">
+        <div class="result-metric">
+          <div class="rm-label">Risk $</div>
+          <div class="rm-val red" id="riskAmount">$0.00</div>
+        </div>
+        <div class="result-metric">
+          <div class="rm-label">Risk %</div>
+          <div class="rm-val amber" id="riskPct">0%</div>
+        </div>
+        <div class="result-metric">
+          <div class="rm-label">R:R Ratio</div>
+          <div class="rm-val jade" id="rrRatio">1:0</div>
+        </div>
+      </div>
+
+      <div class="rr-section" id="rrSection" style="display:none;">
+        <div class="rr-title">Risk / Reward Breakdown</div>
+        <div class="rr-bar-wrap"><div class="rr-bar-risk" id="rrBarRisk" style="width:50%"></div></div>
+        <div class="rr-bar-wrap"><div class="rr-bar-reward" id="rrBarReward" style="width:50%"></div></div>
+        <div class="rr-labels">
+          <span id="rrLossLabel">Risk: $0</span>
+          <span id="rrProfitLabel">Reward: $0</span>
+        </div>
+      </div>
+
+      <div class="trade-summary" id="tradeSummary" style="display:none;">
+        <div class="trade-row">
+          <span class="trade-key">Entry</span>
+          <span class="trade-val" id="sumEntry">—</span>
+        </div>
+        <div class="trade-row">
+          <span class="trade-key">Stop Loss</span>
+          <span class="trade-val" id="sumSL" style="color:var(--crimson);">—</span>
+        </div>
+        <div class="trade-row" id="sumTPRow" style="display:none;">
+          <span class="trade-key">Take Profit</span>
+          <span class="trade-val" id="sumTP" style="color:var(--jade);">—</span>
+        </div>
+        <div class="trade-row">
+          <span class="trade-key" id="distLabel">SL Distance</span>
+          <span class="trade-val" id="sumDist">—</span>
+        </div>
+        <div class="trade-row">
+          <span class="trade-key">Max Loss</span>
+          <span class="trade-val" id="sumMaxLoss" style="color:var(--crimson);">—</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <nav class="bottom-nav">
+    <a href="/dashboard" class="nav-item"><i class="fas fa-home"></i><span>Home</span></a>
+    <a href="/alerts" class="nav-item"><i class="fas fa-bell"></i><span>Alerts</span></a>
+    <a href="/risk" class="nav-item active"><i class="fas fa-shield-alt"></i><span>Risk</span></a>
+    <a href="/settings" class="nav-item"><i class="fas fa-sliders-h"></i><span>Settings</span></a>
+  </nav>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (!user.id && !localStorage.getItem('access_token')) window.location.href = '/';
+    const username = user.email?.split('@')[0] || user.user_metadata?.username || 'Trader';
+    document.getElementById('avatarEl').textContent = username[0].toUpperCase();
+
+    let currentMarket = 'crypto';
+    let useLive = true;
+    let useStockLive = true;
+    let livePx = 0;
+    let stockLivePx = 0;
+    let selCrypto = 'BTC';
+    let selForex = 'EURUSD';
+    let selStock = 'AAPL';
+    let priceInterval;
+    let stockPriceInterval;
+    let lotSizeUnits = 100000;
+
+    const COIN_IDS = {
+      BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', 
+      BNB: 'binancecoin', XRP: 'ripple', ADA: 'cardano', DOGE: 'dogecoin'
+    };
+
+    const FOREX_PIP_VALUES = {
+      EURUSD: 0.0001, GBPUSD: 0.0001, AUDUSD: 0.0001,
+      NZDUSD: 0.0001, USDCHF: 0.0001, USDCAD: 0.0001,
+      USDJPY: 0.01
+    };
+
+    const fmtPx = v => v >= 1000 ? '$' + v.toLocaleString('en-US', { maximumFractionDigits: 2 }) : 
+                       v >= 1 ? '$' + v.toFixed(2) : '$' + v.toPrecision(4);
+    const fmtNum = v => v >= 0.01 ? v.toFixed(6) : v.toPrecision(4);
+
+    async function fetchPrice(coin) {
+      try {
+        const id = COIN_IDS[coin];
+        if (!id) return null;
+        const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`);
+        const d = await r.json();
+        return d[id]?.usd || null;
+      } catch { return null; }
+    }
+
+    async function fetchStockPrice(symbol) {
+      try {
+        const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`);
+        const d = await r.json();
+        return d.chart.result[0]?.meta?.regularMarketPrice || null;
+      } catch { return null; }
+    }
+
+    async function refreshLivePrice() {
+      if (selCrypto === 'custom') return;
+      const price = await fetchPrice(selCrypto);
+      if (price) {
+        livePx = price;
+        document.getElementById('livePriceDisplay').textContent = fmtPx(price);
+        document.getElementById('priceUpdating').textContent = 'Live price';
+        if (useLive && currentMarket === 'crypto') {
+          document.getElementById('entryPrice').value = price.toFixed(price >= 1 ? 2 : 6);
+        }
+      }
+    }
+
+    async function refreshStockLivePrice() {
+      const price = await fetchStockPrice(selStock);
+      if (price) {
+        stockLivePx = price;
+        document.getElementById('stockLivePriceDisplay').textContent = fmtPx(price);
+        document.getElementById('stockPriceUpdating').textContent = 'Live price';
+        if (useStockLive && currentMarket === 'stocks') {
+          document.getElementById('entryPrice').value = price.toFixed(2);
+        }
+      }
+    }
+
+    function toggleLivePrice() {
+      if (currentMarket !== 'crypto') return;
+      useLive = !useLive;
+      const chk = document.getElementById('priceCheck');
+      chk.classList.toggle('off', !useLive);
+      if (useLive && livePx) {
+        document.getElementById('entryPrice').value = livePx.toFixed(livePx >= 1 ? 2 : 6);
+      }
+    }
+
+    function toggleStockLivePrice() {
+      if (currentMarket !== 'stocks') return;
+      useStockLive = !useStockLive;
+      const chk = document.getElementById('stockPriceCheck');
+      chk.classList.toggle('off', !useStockLive);
+      if (useStockLive && stockLivePx) {
+        document.getElementById('entryPrice').value = stockLivePx.toFixed(2);
+      }
+    }
+
+    window.selectCrypto = async function(sym, el) {
+      selCrypto = sym;
+      document.querySelectorAll('.coin-chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      
+      if (priceInterval) clearInterval(priceInterval);
+      
+      if (sym !== 'custom') {
+        await refreshLivePrice();
+        priceInterval = setInterval(refreshLivePrice, 15000);
+      } else {
+        document.getElementById('livePriceDisplay').textContent = '$—';
+        document.getElementById('priceUpdating').textContent = 'Manual entry';
+        if (useLive) {
+          useLive = false;
+          document.getElementById('priceCheck').classList.add('off');
+        }
+        document.getElementById('entryPrice').value = '';
+      }
+    };
+
+    window.selectForex = function(pair, el) {
+      selForex = pair;
+      document.querySelectorAll('.forex-chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      
+      const pipValue = FOREX_PIP_VALUES[pair];
+      document.getElementById('slHelper').innerHTML = `💡 Tip: Enter stop loss as price (e.g., 1.1050) or as pips (e.g., 20)`;
+    };
+
+    window.selectStock = async function(symbol, el) {
+      selStock = symbol;
+      document.querySelectorAll('.stock-chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      
+      if (stockPriceInterval) clearInterval(stockPriceInterval);
+      await refreshStockLivePrice();
+      stockPriceInterval = setInterval(refreshStockLivePrice, 15000);
+    };
+
+    window.switchMarket = function(market, el) {
+      currentMarket = market;
+      document.querySelectorAll('.asset-tab').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+      
+      document.getElementById('cryptoSec').style.display = market === 'crypto' ? 'block' : 'none';
+      document.getElementById('forexSec').style.display = market === 'forex' ? 'block' : 'none';
+      document.getElementById('stocksSec').style.display = market === 'stocks' ? 'block' : 'none';
+      
+      // Update labels and clear fields
+      if (market === 'forex') {
+        document.getElementById('posSizeLabel').textContent = 'Position Size (lots)';
+        document.getElementById('distLabel').textContent = 'SL Distance (pips)';
+        document.getElementById('entryPrefix').textContent = '';
+        document.getElementById('slPrefix').textContent = '';
+        document.getElementById('tpPrefix').textContent = '';
+        document.getElementById('entryLabel').textContent = 'Entry Price';
+        document.getElementById('slLabel').textContent = 'Stop Loss';
+        document.getElementById('tpLabel').textContent = 'Take Profit (optional)';
+        document.getElementById('entryPrice').value = '';
+        document.getElementById('stopLoss').value = '';
+        document.getElementById('takeProfit').value = '';
+        // Set default EUR/USD price
+        document.getElementById('entryPrice').value = '1.0850';
+        document.getElementById('stopLoss').value = '20'; // 20 pips example
+      } else if (market === 'stocks') {
+        document.getElementById('posSizeLabel').textContent = 'Position Size (shares)';
+        document.getElementById('distLabel').textContent = 'SL Distance ($)';
+        document.getElementById('entryPrefix').textContent = '$';
+        document.getElementById('slPrefix').textContent = '$';
+        document.getElementById('tpPrefix').textContent = '$';
+        document.getElementById('entryLabel').textContent = 'Entry Price ($)';
+        document.getElementById('slLabel').textContent = 'Stop Loss ($)';
+        document.getElementById('tpLabel').textContent = 'Take Profit ($) (optional)';
+        if (useStockLive && stockLivePx) {
+          document.getElementById('entryPrice').value = stockLivePx.toFixed(2);
+        }
+      } else {
+        document.getElementById('posSizeLabel').textContent = 'Position Size';
+        document.getElementById('distLabel').textContent = 'SL Distance';
+        document.getElementById('entryPrefix').textContent = '$';
+        document.getElementById('slPrefix').textContent = '$';
+        document.getElementById('tpPrefix').textContent = '$';
+        document.getElementById('entryLabel').textContent = 'Entry Price ($)';
+        document.getElementById('slLabel').textContent = 'Stop Loss ($)';
+        document.getElementById('tpLabel').textContent = 'Take Profit ($) (optional)';
+        if (useLive && livePx) {
+          document.getElementById('entryPrice').value = livePx.toFixed(livePx >= 1 ? 2 : 6);
+        }
+      }
+      
+      document.getElementById('slHelper').innerHTML = '';
+    };
+
+    document.getElementById('lotType').addEventListener('change', function() {
+      const val = this.value;
+      if (val === 'standard') lotSizeUnits = 100000;
+      else if (val === 'mini') lotSizeUnits = 10000;
+      else if (val === 'micro') lotSizeUnits = 1000;
+      else {
+        document.getElementById('customUnitsField').style.display = 'block';
+        return;
+      }
+      document.getElementById('customUnitsField').style.display = 'none';
+    });
+
+    document.getElementById('customUnits').addEventListener('input', function() {
+      lotSizeUnits = parseFloat(this.value) || 0;
+    });
+
+    window.setRisk = function(val) {
+      document.getElementById('riskPercent').value = val;
+      document.getElementById('riskSlider').value = val;
+      document.querySelectorAll('.risk-preset').forEach(b => {
+        b.classList.toggle('active', parseFloat(b.textContent) === val);
+      });
+    };
+
+    document.getElementById('riskPercent').addEventListener('input', function() {
+      document.getElementById('riskSlider').value = this.value;
+    });
+    document.getElementById('riskSlider').addEventListener('input', function() {
+      document.getElementById('riskPercent').value = parseFloat(this.value).toFixed(1);
+    });
+
+    window.calculate = function() {
+      const balance = parseFloat(document.getElementById('accountBalance').value);
+      const riskPct = parseFloat(document.getElementById('riskPercent').value);
+      
+      if (!balance || !riskPct) {
+        showToast('Please fill in account balance and risk percentage');
+        return;
+      }
+      
+      const riskAmount = balance * (riskPct / 100);
+      
+      if (currentMarket === 'forex') {
+        calculateForex(riskAmount);
+      } else if (currentMarket === 'stocks') {
+        calculateStocks(riskAmount);
+      } else {
+        calculateCrypto(riskAmount);
+      }
+    };
+
+    function calculateCrypto(riskAmount) {
+      const entry = parseFloat(document.getElementById('entryPrice').value);
+      const sl = parseFloat(document.getElementById('stopLoss').value);
+      const tp = parseFloat(document.getElementById('takeProfit').value);
+      
+      if (!entry || !sl) {
+        showToast('Please fill in entry price and stop loss');
+        return;
+      }
+      if (sl === entry) {
+        showToast('Stop loss cannot equal entry price');
+        return;
+      }
+      
+      const slDist = Math.abs(entry - sl);
+      const slDistPct = (slDist / entry) * 100;
+      const posSize = riskAmount / slDist;
+      const posValue = posSize * entry;
+      
+      let rrRatio = '—';
+      let rewardAmt = 0;
+      let hasTP = !isNaN(tp) && tp > 0;
+      
+      if (hasTP) {
+        rewardAmt = Math.abs(tp - entry) * posSize;
+        const rr = Math.abs(tp - entry) / slDist;
+        rrRatio = '1:' + rr.toFixed(2);
+      }
+      
+      updateResults(posSize, posValue, riskAmount, riskAmount, rrRatio, rewardAmt, hasTP, entry, sl, tp, slDist, slDistPct, 'units');
+    }
+    
+    function calculateForex(riskAmount) {
+      const entry = parseFloat(document.getElementById('entryPrice').value);
+      let sl = parseFloat(document.getElementById('stopLoss').value);
+      const tp = parseFloat(document.getElementById('takeProfit').value);
+      
+      if (!entry || !sl) {
+        showToast('Please fill in entry price and stop loss');
+        return;
+      }
+      
+      const pipValue = FOREX_PIP_VALUES[selForex];
+      let slInPips, slDistance;
+      
+      // Check if SL is entered as price or pips (if value is small like 10-100, treat as pips)
+      if (sl < 1 && selForex !== 'USDJPY') {
+        slInPips = sl;
+        slDistance = sl * pipValue;
+      } else if (selForex === 'USDJPY' && sl < 100) {
+        slInPips = sl;
+        slDistance = sl * pipValue;
+      } else {
+        slDistance = Math.abs(entry - sl);
+        slInPips = slDistance / pipValue;
+      }
+      
+      if (slDistance === 0) {
+        showToast('Stop loss cannot equal entry price');
+        return;
+      }
+      
+      const pipCost = 10;
+      const lotMultiplier = lotSizeUnits / 100000;
+      const positionSizeLots = riskAmount / (slInPips * pipCost * lotMultiplier);
+      const posValue = positionSizeLots * lotSizeUnits * entry;
+      
+      let rrRatio = '—';
+      let rewardAmt = 0;
+      let hasTP = !isNaN(tp) && tp > 0;
+      
+      if (hasTP) {
+        let tpInPips, tpDistance;
+        if (tp < 1 && selForex !== 'USDJPY') {
+          tpInPips = tp;
+          tpDistance = tp * pipValue;
+        } else if (selForex === 'USDJPY' && tp < 100) {
+          tpInPips = tp;
+          tpDistance = tp * pipValue;
+        } else {
+          tpDistance = Math.abs(tp - entry);
+          tpInPips = tpDistance / pipValue;
+        }
+        rewardAmt = tpInPips * pipCost * lotMultiplier * positionSizeLots;
+        const rr = tpInPips / slInPips;
+        rrRatio = '1:' + rr.toFixed(2);
+      }
+      
+      updateResults(positionSizeLots.toFixed(2), posValue, riskAmount, riskAmount, rrRatio, rewardAmt, hasTP, entry, sl, tp, slInPips, 0, 'lots');
+    }
+    
+    function calculateStocks(riskAmount) {
+      const entry = parseFloat(document.getElementById('entryPrice').value);
+      const sl = parseFloat(document.getElementById('stopLoss').value);
+      const tp = parseFloat(document.getElementById('takeProfit').value);
+      
+      if (!entry || !sl) {
+        showToast('Please fill in entry price and stop loss');
+        return;
+      }
+      if (sl === entry) {
+        showToast('Stop loss cannot equal entry price');
+        return;
+      }
+      
+      const slDist = Math.abs(entry - sl);
+      const slDistPct = (slDist / entry) * 100;
+      const shares = riskAmount / slDist;
+      const posValue = shares * entry;
+      
+      let rrRatio = '—';
+      let rewardAmt = 0;
+      let hasTP = !isNaN(tp) && tp > 0;
+      
+      if (hasTP) {
+        rewardAmt = Math.abs(tp - entry) * shares;
+        const rr = Math.abs(tp - entry) / slDist;
+        rrRatio = '1:' + rr.toFixed(2);
+      }
+      
+      updateResults(shares, posValue, riskAmount, riskAmount, rrRatio, rewardAmt, hasTP, entry, sl, tp, slDist, slDistPct, 'shares');
+    }
+    
+    function updateResults(posSize, posValue, riskAmount, riskAmountDisp, rrRatio, rewardAmt, hasTP, entry, sl, tp, slDist, slDistPct, unit) {
+      document.getElementById('posSize').textContent = typeof posSize === 'number' ? fmtNum(posSize) : posSize;
+      document.getElementById('posUsd').textContent = `≈ ${fmtPx(posValue)} position value`;
+      document.getElementById('riskAmount').textContent = fmtPx(riskAmountDisp);
+      document.getElementById('riskPct').textContent = document.getElementById('riskPercent').value + '%';
+      document.getElementById('rrRatio').textContent = rrRatio;
+      document.getElementById('sumEntry').textContent = fmtPx(entry);
+      document.getElementById('sumSL').textContent = fmtPx(sl);
+      
+      if (currentMarket === 'forex') {
+        document.getElementById('sumDist').textContent = slDist.toFixed(1) + ' pips';
+      } else {
+        document.getElementById('sumDist').textContent = fmtPx(slDist) + ' (' + slDistPct.toFixed(2) + '%)';
+      }
+      
+      document.getElementById('sumMaxLoss').textContent = fmtPx(riskAmount);
+      document.getElementById('tradeSummary').style.display = 'block';
+      
+      if (hasTP && tp > 0) {
+        document.getElementById('sumTP').textContent = fmtPx(tp);
+        document.getElementById('sumTPRow').style.display = 'flex';
+        const total = riskAmount + rewardAmt;
+        const riskW = ((riskAmount / total) * 100).toFixed(1);
+        const rewardW = ((rewardAmt / total) * 100).toFixed(1);
+        document.getElementById('rrBarRisk').style.width = riskW + '%';
+        document.getElementById('rrBarReward').style.width = rewardW + '%';
+        document.getElementById('rrLossLabel').textContent = 'Risk: ' + fmtPx(riskAmount);
+        document.getElementById('rrProfitLabel').textContent = 'Reward: ' + fmtPx(rewardAmt);
+        document.getElementById('rrSection').style.display = 'block';
+      } else {
+        document.getElementById('rrSection').style.display = 'none';
+        document.getElementById('sumTPRow').style.display = 'none';
+      }
+    }
+
+    let toastTimer;
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+    }
+
+    window.logout = async () => {
+      try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {}
+      localStorage.clear();
+      window.location.href = '/';
+    };
+
+    refreshLivePrice();
+    priceInterval = setInterval(refreshLivePrice, 15000);
+    refreshStockLivePrice();
+    stockPriceInterval = setInterval(refreshStockLivePrice, 15000);
+  </script>
+</body>
+</html>

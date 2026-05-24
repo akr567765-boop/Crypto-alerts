@@ -1,0 +1,43 @@
+{
+  "telegramChatIds": [
+    7049878083
+  ],
+  "emailSubscribers": [],
+  "userAlerts": {
+    "test-user": [
+      {
+        "id": 1779358316215,
+        "cryptoId": "btc",
+        "cryptoName": "BTC",
+        "targetPrice": 1,
+        "type": "above",
+        "notificationChannels": [
+          "telegram"
+        ],
+        "recurring": "once",
+        "note": "Test alert - will trigger immediately",
+        "createdAt": "2026-05-21T10:11:56.215Z",
+        "triggered": true,
+        "triggeredPrice": 75637.82,
+        "triggeredAt": "2026-05-23T03:32:38.103Z"
+      },
+      {
+        "id": 1779358316234,
+        "cryptoId": "btc",
+        "cryptoName": "BTC",
+        "targetPrice": 100000,
+        "type": "below",
+        "notificationChannels": [
+          "telegram"
+        ],
+        "recurring": "once",
+        "note": "Test alert - BTC below 100k",
+        "createdAt": "2026-05-21T10:11:56.233Z",
+        "triggered": true,
+        "triggeredPrice": 75637.82,
+        "triggeredAt": "2026-05-23T03:32:38.252Z"
+      }
+    ],
+    "85ef8af9-fbb6-459b-afa0-6fa424219a22": []
+  }
+}

@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <title>CryptoFlow | Alerts</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --ink-0: #04060b;
+      --ink-1: #080c14;
+      --ink-2: #0d1220;
+      --ink-3: #131a2c;
+      --ink-4: #1a2438;
+      --ink-5: #212e46;
+
+      --glass: rgba(255,255,255,0.028);
+      --glass-2: rgba(255,255,255,0.052);
+      --glass-3: rgba(255,255,255,0.088);
+      --border: rgba(255,255,255,0.068);
+      --border-2: rgba(255,255,255,0.11);
+
+      --jade: #00e87a;
+      --jade-dim: #00b85f;
+      --jade-pale: rgba(0,232,122,0.06);
+      --jade-glow: rgba(0,232,122,0.18);
+      --jade-halo: rgba(0,232,122,0.04);
+
+      --crimson: #ff3d5a;
+      --crimson-pale: rgba(255,61,90,0.07);
+      --amber: #f5a623;
+      --sky: #38beff;
+
+      --t0: #ffffff;
+      --t1: #e8edf8;
+      --t2: #8896b0;
+      --t3: #4a5672;
+      --t4: #2a3248;
+
+      --serif: 'Instrument Serif', serif;
+      --sans: 'Geist', sans-serif;
+      --mono: 'Geist Mono', monospace;
+
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    body {
+      background: var(--ink-0);
+      font-family: var(--sans);
+      color: var(--t1);
+      min-height: 100vh;
+      padding-bottom: 80px;
+      overflow-x: hidden;
+    }
+
+    .canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .canvas-noise {
+      position: absolute;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      background-size: 256px;
+      opacity: 0.55;
+    }
+    .canvas-aurora {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 70% 50% at 15% 10%, rgba(0,232,122,0.055) 0%, transparent 65%),
+        radial-gradient(ellipse 50% 60% at 85% 80%, rgba(56,190,255,0.04) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 40% at 50% 50%, rgba(0,232,122,0.02) 0%, transparent 70%);
+      animation: aurora 20s ease-in-out infinite alternate;
+    }
+    @keyframes aurora {
+      0%   { opacity: 1; transform: scale(1) translateY(0); }
+      50%  { opacity: 0.7; transform: scale(1.06) translateY(-20px); }
+      100% { opacity: 1; transform: scale(0.97) translateY(10px); }
+    }
+    .canvas-lines {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.013) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.013) 1px, transparent 1px);
+      background-size: 56px 56px;
+      mask-image: radial-gradient(ellipse 90% 80% at 50% 30%, black 10%, transparent 100%);
+    }
+    .canvas-vignette {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 100% 100% at 50% 0%, transparent 50%, rgba(4,6,11,0.7) 100%);
+    }
+
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      background: rgba(4,6,11,0.82);
+      backdrop-filter: blur(40px) saturate(180%);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+      height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+    .logo-mark {
+      width: 32px;
+      height: 32px;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .logo-mark svg { width: 100%; height: 100%; }
+    .logo-text {
+      font-family: var(--serif);
+      font-size: 20px;
+      color: var(--t0);
+      letter-spacing: -0.2px;
+    }
+    .header-center {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px 4px 8px;
+      background: rgba(0,232,122,0.06);
+      border: 1px solid rgba(0,232,122,0.15);
+      border-radius: 20px;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--jade);
+      letter-spacing: 0.5px;
+    }
+    .live-dot {
+      width: 5px;
+      height: 5px;
+      background: var(--jade);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--jade);
+      animation: livePulse 2s ease-in-out infinite;
+    }
+    @keyframes livePulse {
+      0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 8px var(--jade); }
+      50%       { opacity: 0.5; transform: scale(0.75); box-shadow: 0 0 4px var(--jade); }
+    }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--jade) 0%, #00c96a 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: 12px;
+      color: #000;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .btn-exit {
+      height: 30px;
+      padding: 0 12px;
+      background: transparent;
+      border: 1px solid rgba(255,61,90,0.2);
+      border-radius: 7px;
+      color: var(--crimson);
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s;
+    }
+    .btn-exit:hover {
+      background: rgba(255,61,90,0.08);
+      border-color: rgba(255,61,90,0.4);
+    }
+
+    .main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 24px 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    .page-header { margin-bottom: 32px; }
+    .page-eyebrow {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 400;
+      color: var(--jade);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .page-title {
+      font-family: var(--serif);
+      font-size: clamp(28px, 5vw, 40px);
+      font-weight: 400;
+      color: var(--t0);
+      line-height: 1.1;
+      letter-spacing: -0.5px;
+    }
+    .page-title em { font-style: italic; color: var(--jade); }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 32px;
+    }
+    .stat-card {
+      position: relative;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 22px 22px 18px;
+      transition: transform 0.3s var(--ease-smooth), border-color 0.3s;
+      animation: fadeUp 0.6s var(--ease-smooth) both;
+    }
+    .stat-card:nth-child(1) { animation-delay: 0.05s; }
+    .stat-card:nth-child(2) { animation-delay: 0.12s; }
+    .stat-card:nth-child(3) { animation-delay: 0.19s; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .stat-card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(0,232,122,0.15);
+    }
+    .stat-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      margin-bottom: 14px;
+    }
+    .stat-icon.total   { background: rgba(0,232,122,0.1); color: var(--jade); border: 1px solid rgba(0,232,122,0.15); }
+    .stat-icon.active  { background: rgba(56,190,255,0.1); color: var(--sky); border: 1px solid rgba(56,190,255,0.15); }
+    .stat-icon.hit     { background: rgba(245,166,35,0.1); color: var(--amber); border: 1px solid rgba(245,166,35,0.15); }
+    .stat-num {
+      font-family: var(--mono);
+      font-size: 34px;
+      font-weight: 500;
+      color: var(--t0);
+      line-height: 1;
+      margin-bottom: 5px;
+      letter-spacing: -1px;
+    }
+    .stat-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--t3);
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+
+    .controls-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .filter-group {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      flex: 1;
+    }
+    .filter-pill {
+      padding: 7px 14px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 30px;
+      color: var(--t3);
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .filter-pill:hover { border-color: var(--border-2); color: var(--t1); }
+    .filter-pill.active {
+      background: var(--jade);
+      border-color: var(--jade);
+      color: #000;
+      font-weight: 600;
+    }
+    .btn-create {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 18px;
+      background: var(--jade);
+      border: none;
+      border-radius: 10px;
+      color: #000;
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.25s;
+      white-space: nowrap;
+      flex-shrink: 0;
+      box-shadow: 0 4px 20px rgba(0,232,122,0.25);
+    }
+    .btn-create:hover { transform: translateY(-1px); box-shadow: 0 8px 30px rgba(0,232,122,0.35); }
+
+    .alerts-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .alert-card {
+      position: relative;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+      transition: all 0.25s;
+      animation: fadeUp 0.5s var(--ease-smooth) both;
+    }
+    .alert-card:hover {
+      border-color: var(--border-2);
+      transform: translateX(2px);
+      background: var(--glass-2);
+    }
+    .alert-card.is-triggered {
+      border-color: rgba(0,232,122,0.12);
+      background: rgba(0,232,122,0.015);
+    }
+    .alert-card.is-triggered::after {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      background: linear-gradient(180deg, var(--jade), var(--jade-dim));
+      border-radius: 3px 0 0 3px;
+    }
+
+    .alert-inner { padding: 20px 22px; }
+
+    .alert-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .alert-left { display: flex; align-items: center; gap: 12px; }
+    .coin-badge {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: var(--glass-2);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--t2);
+      flex-shrink: 0;
+    }
+    .coin-pair {
+      font-family: var(--sans);
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--t0);
+      letter-spacing: -0.3px;
+    }
+    .coin-sub {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--t3);
+      margin-top: 2px;
+    }
+
+    .alert-badges { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .badge {
+      padding: 3px 9px;
+      border-radius: 20px;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.3px;
+    }
+    .badge-above { background: rgba(0,232,122,0.1); color: var(--jade); border: 1px solid rgba(0,232,122,0.18); }
+    .badge-below { background: rgba(255,61,90,0.1); color: var(--crimson); border: 1px solid rgba(255,61,90,0.18); }
+    .badge-active { background: rgba(56,190,255,0.08); color: var(--sky); border: 1px solid rgba(56,190,255,0.15); }
+    .badge-triggered { background: rgba(255,255,255,0.04); color: var(--t3); border: 1px solid var(--border); }
+
+    .alert-metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    .metric {
+      padding: 12px 14px;
+      background: var(--ink-2);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .metric-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 400;
+      color: var(--t3);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .metric-value {
+      font-family: var(--mono);
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--t1);
+    }
+    .metric-value.jade { color: var(--jade); }
+    .metric-value.red { color: var(--crimson); }
+
+    .alert-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .alert-note {
+      font-size: 12px;
+      color: var(--t3);
+      font-style: italic;
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .alert-actions { display: flex; gap: 6px; }
+    .action-btn {
+      height: 30px;
+      padding: 0 12px;
+      border-radius: 7px;
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      border: none;
+    }
+    .action-btn.del {
+      background: rgba(255,61,90,0.07);
+      color: var(--crimson);
+      border: 1px solid rgba(255,61,90,0.15);
+    }
+    .action-btn.del:hover { background: rgba(255,61,90,0.14); }
+    .action-btn.edit {
+      background: var(--glass);
+      color: var(--t2);
+      border: 1px solid var(--border);
+    }
+    .action-btn.edit:hover { border-color: var(--border-2); color: var(--t1); }
+    .action-btn.reactivate {
+      background: var(--jade-pale);
+      color: var(--jade);
+      border: 1px solid rgba(0,232,122,0.18);
+    }
+    .action-btn.reactivate:hover { background: var(--jade-glow); }
+
+    .empty-state {
+      text-align: center;
+      padding: 72px 24px;
+      color: var(--t3);
+    }
+    .empty-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      margin: 0 auto 20px;
+      color: var(--t4);
+    }
+
+    .tg-card {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      margin-bottom: 28px;
+      position: relative;
+      overflow: hidden;
+    }
+    .tg-card::before {
+      content: '';
+      position: absolute;
+      top: -60px; right: -60px;
+      width: 200px; height: 200px;
+      background: radial-gradient(circle, rgba(0,136,204,0.1), transparent 70%);
+      pointer-events: none;
+    }
+    .tg-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+    .tg-icon {
+      width: 46px;
+      height: 46px;
+      border-radius: 13px;
+      background: linear-gradient(135deg, #0088cc 0%, #00b0e8 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      color: #fff;
+      flex-shrink: 0;
+      box-shadow: 0 4px 16px rgba(0,136,204,0.3);
+    }
+    .tg-title { font-family: var(--serif); font-size: 20px; color: var(--t0); font-weight: 400; }
+    .tg-sub { font-size: 12px; color: var(--t3); margin-top: 2px; }
+    .tg-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: rgba(0,136,204,0.08);
+      border: 1px solid rgba(0,136,204,0.2);
+      border-radius: 10px;
+      color: #38beff;
+      text-decoration: none;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 16px;
+      transition: all 0.2s;
+    }
+    .tg-link:hover { background: rgba(0,136,204,0.14); }
+    .tg-steps { font-size: 12px; color: var(--t2); line-height: 1.8; }
+    .tg-steps strong { color: var(--t1); font-weight: 600; }
+    .tg-steps code {
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 1px 5px;
+      background: var(--glass-2);
+      border-radius: 4px;
+      color: var(--jade);
+    }
+    .tg-test {
+      margin-top: 16px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 16px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      color: var(--t2);
+      font-family: var(--sans);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tg-test:hover { border-color: var(--jade); color: var(--jade); }
+
+    .bottom-nav {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 64px;
+      background: rgba(4,6,11,0.95);
+      backdrop-filter: blur(32px);
+      border-top: 1px solid var(--border);
+      display: flex;
+      z-index: 200;
+    }
+    .nav-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      color: var(--t4);
+      text-decoration: none;
+      font-size: 9.5px;
+      font-weight: 500;
+      letter-spacing: 0.3px;
+      transition: color 0.2s;
+      position: relative;
+    }
+    .nav-item i { font-size: 17px; }
+    .nav-item.active { color: var(--jade); }
+    .nav-item.active::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 50%;
+      transform: translateX(-50%);
+      width: 24px; height: 2px;
+      background: var(--jade);
+      border-radius: 0 0 3px 3px;
+    }
+
+    .overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(4,6,11,0.88);
+      backdrop-filter: blur(24px);
+      z-index: 9000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .overlay.open { display: flex; }
+
+    .modal {
+      width: 100%;
+      max-width: 480px;
+      background: var(--ink-2);
+      border: 1px solid var(--border-2);
+      border-radius: 24px;
+      overflow: hidden;
+      animation: modalIn 0.35s var(--ease-spring) both;
+    }
+    @keyframes modalIn {
+      from { opacity: 0; transform: scale(0.93) translateY(20px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .modal-header {
+      padding: 28px 28px 0;
+      position: relative;
+    }
+    .modal-eyebrow {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--jade);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .modal-title {
+      font-family: var(--serif);
+      font-size: 26px;
+      color: var(--t0);
+      font-weight: 400;
+      margin-bottom: 2px;
+    }
+    .modal-sub { font-size: 13px; color: var(--t3); margin-bottom: 24px; }
+    .modal-close {
+      position: absolute;
+      top: 24px; right: 24px;
+      width: 30px; height: 30px;
+      background: var(--glass-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--t3);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+    .modal-close:hover { color: var(--t1); border-color: var(--border-2); }
+
+    .modal-body { padding: 0 28px 28px; }
+    .field { margin-bottom: 18px; }
+    .field-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 400;
+      color: var(--t3);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 8px;
+    }
+
+    .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .type-opt {
+      padding: 12px 14px;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--t2);
+    }
+    .type-opt:hover { border-color: var(--border-2); color: var(--t1); }
+    .type-opt.sel { border-color: var(--jade); background: var(--jade-pale); color: var(--jade); }
+    .type-opt.sel-red { border-color: var(--crimson); background: var(--crimson-pale); color: var(--crimson); }
+
+    .search-wrap { position: relative; }
+    .field-input, .field-textarea {
+      width: 100%;
+      padding: 11px 14px;
+      background: var(--ink-3);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--t1);
+      font-family: var(--sans);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .field-input:focus, .field-textarea:focus {
+      border-color: var(--jade);
+      box-shadow: 0 0 0 3px rgba(0,232,122,0.08);
+    }
+    .field-textarea { resize: vertical; min-height: 72px; }
+
+    .search-dropdown {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0; right: 0;
+      background: var(--ink-3);
+      border: 1px solid var(--border-2);
+      border-radius: 11px;
+      overflow: hidden;
+      max-height: 220px;
+      overflow-y: auto;
+      z-index: 100;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+    }
+    .search-item {
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: background 0.15s;
+      font-size: 13px;
+    }
+    .search-item:hover { background: var(--jade-halo); }
+    .search-item-sym { font-weight: 500; color: var(--t1); }
+    .search-item-price { font-family: var(--mono); font-size: 11px; color: var(--jade); }
+
+    .price-chip {
+      margin-top: 8px;
+      padding: 9px 12px;
+      background: var(--jade-pale);
+      border: 1px solid rgba(0,232,122,0.12);
+      border-radius: 9px;
+      display: none;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+    }
+    .price-chip-label { color: var(--t2); }
+    .price-chip-val { font-family: var(--mono); font-weight: 500; color: var(--jade); }
+
+    .recur-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .recur-pill {
+      padding: 7px 14px;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 30px;
+      color: var(--t2);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .recur-pill.active {
+      background: var(--jade);
+      border-color: var(--jade);
+      color: #000;
+      font-weight: 700;
+    }
+
+    .modal-divider { height: 1px; background: var(--border); margin: 20px 0; }
+    .modal-actions { display: flex; gap: 10px; }
+    .btn-save {
+      flex: 1;
+      padding: 12px;
+      background: var(--jade);
+      border: none;
+      border-radius: 10px;
+      color: #000;
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 4px 20px rgba(0,232,122,0.2);
+    }
+    .btn-save:hover { box-shadow: 0 6px 28px rgba(0,232,122,0.35); }
+    .btn-cancel {
+      padding: 12px 20px;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--t2);
+      font-family: var(--sans);
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-cancel:hover { border-color: var(--border-2); color: var(--t1); }
+
+    .toast {
+      position: fixed;
+      bottom: 80px; left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      background: var(--ink-4);
+      border: 1px solid var(--border-2);
+      border-radius: 10px;
+      padding: 10px 18px;
+      font-size: 13px;
+      color: var(--t1);
+      z-index: 99999;
+      opacity: 0;
+      transition: all 0.28s;
+      pointer-events: none;
+      white-space: nowrap;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    @media (max-width: 600px) {
+      .main { padding: 20px 16px 0; }
+      .stats-row { grid-template-columns: 1fr 1fr; }
+      .stats-row .stat-card:last-child { grid-column: 1 / -1; }
+      .controls-row { flex-direction: column; align-items: stretch; }
+      .btn-create { justify-content: center; }
+      .modal-header, .modal-body { padding-left: 20px; padding-right: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="canvas">
+    <div class="canvas-noise"></div>
+    <div class="canvas-aurora"></div>
+    <div class="canvas-lines"></div>
+    <div class="canvas-vignette"></div>
+  </div>
+
+  <header class="header">
+    <div class="header-inner">
+      <a class="logo" href="/dashboard">
+        <div class="logo-mark">
+          <svg viewBox="0 0 32 32" fill="none">
+            <rect width="32" height="32" rx="9" fill="url(#lg)"/>
+            <path d="M16 6L7 12.5V19.5L16 26L25 19.5V12.5L16 6Z" stroke="#000" stroke-width="1.4" stroke-linejoin="round"/>
+            <path d="M16 6L16 26" stroke="#000" stroke-width="1.4"/>
+            <path d="M7 12.5L25 12.5" stroke="#000" stroke-width="1.4"/>
+            <defs><linearGradient id="lg" x1="0" y1="0" x2="32" y2="32"><stop stop-color="#00e87a"/><stop offset="1" stop-color="#00b85f"/></linearGradient></defs>
+          </svg>
+        </div>
+        <span class="logo-text">CryptoFlow</span>
+      </a>
+      <div class="header-center">
+        <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+      </div>
+      <div class="header-right">
+        <div class="avatar" id="avatarEl">T</div>
+        <button class="btn-exit" onclick="logout()"><i class="fas fa-power-off" style="font-size:10px;"></i> Exit</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="page-header">
+      <div class="page-eyebrow">Price Monitoring</div>
+      <h1 class="page-title">Your <em>Alerts</em></h1>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-icon total"><i class="fas fa-bell"></i></div>
+        <div class="stat-num" id="totalAlerts">0</div>
+        <div class="stat-label">Total</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon active"><i class="fas fa-circle"></i></div>
+        <div class="stat-num" id="activeAlerts">0</div>
+        <div class="stat-label">Active</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon hit"><i class="fas fa-check-circle"></i></div>
+        <div class="stat-num" id="triggeredAlerts">0</div>
+        <div class="stat-label">Triggered</div>
+      </div>
+    </div>
+
+    <div class="controls-row">
+      <div class="filter-group">
+        <button class="filter-pill active" data-filter="all">All</button>
+        <button class="filter-pill" data-filter="active">Active</button>
+        <button class="filter-pill" data-filter="triggered">Triggered</button>
+        <button class="filter-pill" data-filter="above">Above</button>
+        <button class="filter-pill" data-filter="below">Below</button>
+      </div>
+      <button class="btn-create" onclick="openCreateModal()">
+        <i class="fas fa-plus"></i> New Alert
+      </button>
+    </div>
+
+    <div class="alerts-grid" id="alertsContainer"></div>
+
+    <div class="tg-card">
+      <div class="tg-head">
+        <div class="tg-icon"><i class="fab fa-telegram-plane"></i></div>
+        <div class="tg-title-group">
+          <div class="tg-title">Telegram Notifications</div>
+          <div class="tg-sub">Instant alerts delivered to your phone</div>
+        </div>
+      </div>
+      <a href="https://t.me/Crypto0_flowbot" target="_blank" class="tg-link">
+        <i class="fab fa-telegram"></i> @Crypto0_flowbot
+        <i class="fas fa-arrow-up-right-from-square" style="font-size:9px;"></i>
+      </a>
+      <div class="tg-steps">
+        <strong>How it works</strong><br>
+        1. Open the bot link above &nbsp;·&nbsp; 2. Tap <strong>Start</strong> or send <code>/start</code> &nbsp;·&nbsp; 3. Get instant alerts
+      </div>
+      <button class="tg-test" onclick="sendTestAlert()">
+        <i class="fas fa-paper-plane"></i> Send test notification
+      </button>
+    </div>
+  </main>
+
+  <div class="overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-eyebrow" id="modalEyebrow">New Alert</div>
+        <div class="modal-title" id="modalTitle">Set Price Target</div>
+        <div class="modal-sub" id="modalSub">Configure your alert conditions</div>
+        <button class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <div class="field-label">Alert Type</div>
+          <div class="type-grid">
+            <div class="type-opt sel" data-type="above" onclick="selectType('above', this)">
+              <span class="type-icon">↑</span> Price Above
+            </div>
+            <div class="type-opt" data-type="below" onclick="selectType('below', this)">
+              <span class="type-icon">↓</span> Price Below
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">Coin</div>
+          <div class="search-wrap">
+            <input type="text" class="field-input" id="coinSearch" placeholder="BTC, ETH, SOL…" autocomplete="off">
+            <div class="search-dropdown" id="searchDropdown" style="display:none;"></div>
+          </div>
+          <input type="hidden" id="selectedCoin">
+          <div class="price-chip" id="priceChip">
+            <span class="price-chip-label">Live Price</span>
+            <span class="price-chip-val" id="priceChipVal">—</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">Target Price (USDT)</div>
+          <input type="number" class="field-input" id="targetPrice" placeholder="0.00" step="any">
+        </div>
+
+        <div class="field">
+          <div class="field-label">Frequency</div>
+          <div class="recur-row" id="recurRow">
+            <button type="button" class="recur-pill active" data-recurring="once">Once</button>
+            <button type="button" class="recur-pill" data-recurring="daily">Daily</button>
+            <button type="button" class="recur-pill" data-recurring="hourly">Hourly</button>
+            <button type="button" class="recur-pill" data-recurring="always">Always</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">Note <span style="color:var(--t4);">(optional)</span></div>
+          <textarea class="field-textarea" id="alertNote" placeholder="Personal reminder…"></textarea>
+        </div>
+
+        <div class="modal-divider"></div>
+        <div class="modal-actions">
+          <button class="btn-save" id="btnSave" onclick="saveAlert()">Create Alert</button>
+          <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <a href="/dashboard" class="nav-item"><i class="fas fa-home"></i><span>Home</span></a>
+    <a href="/alerts" class="nav-item active"><i class="fas fa-bell"></i><span>Alerts</span></a>
+    <a href="/risk" class="nav-item"><i class="fas fa-shield-alt"></i><span>Risk</span></a>
+    <a href="/settings" class="nav-item"><i class="fas fa-sliders-h"></i><span>Settings</span></a>
+  </nav>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (!user.id && !localStorage.getItem('access_token')) window.location.href = '/';
+    const username = user.email?.split('@')[0] || user.user_metadata?.username || 'Trader';
+    document.getElementById('avatarEl').textContent = username[0].toUpperCase();
+
+    let allAlerts = [];
+    let allCoins = [];
+    let currentFilter = 'all';
+    let editingAlertId = null;
+    let currentRecurring = 'once';
+    let currentType = 'above';
+    let currentCoinPrice = 0;
+
+    const fmtPx = v => v >= 1000 ? '$' + v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : v >= 1 ? '$' + v.toFixed(2) : '$' + v.toPrecision(4);
+
+    async function loadCoins() {
+      try {
+        const r = await fetch('https://api.binance.com/api/v3/exchangeInfo');
+        const d = await r.json();
+        allCoins = d.symbols.filter(s => s.quoteAsset === 'USDT' && s.status === 'TRADING').map(s => s.baseAsset).sort();
+      } catch(e) { console.warn(e); }
+    }
+
+    async function fetchCoinPrice(coin) {
+      try {
+        const r = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${coin}USDT`);
+        return parseFloat((await r.json()).price);
+      } catch { return null; }
+    }
+
+    async function onCoinSelected(coin) {
+      document.getElementById('selectedCoin').value = coin;
+      document.getElementById('coinSearch').value = coin;
+      document.getElementById('searchDropdown').style.display = 'none';
+      const price = await fetchCoinPrice(coin);
+      if (price) {
+        currentCoinPrice = price;
+        document.getElementById('priceChipVal').textContent = fmtPx(price);
+        document.getElementById('priceChip').style.display = 'flex';
+        const t = document.getElementById('targetPrice');
+        if (!t.value) {
+          t.value = (currentType === 'above' ? price * 1.05 : price * 0.95).toFixed(price >= 1 ? 2 : 6);
+        }
+      } else {
+        document.getElementById('priceChip').style.display = 'none';
+      }
+    }
+
+    function selectType(type, el) {
+      document.querySelectorAll('.type-opt').forEach(o => o.classList.remove('sel', 'sel-red'));
+      el.classList.add(type === 'above' ? 'sel' : 'sel-red');
+      currentType = type;
+      if (currentCoinPrice > 0) {
+        const t = document.getElementById('targetPrice');
+        if (!t.value || t.value === '0') {
+          t.value = (type === 'above' ? currentCoinPrice * 1.05 : currentCoinPrice * 0.95).toFixed(currentCoinPrice >= 1 ? 2 : 6);
+        }
+      }
+    }
+
+    async function loadAlerts() {
+      try {
+        const r = await fetch(`/api/alerts/${user.id}`);
+        allAlerts = await r.json();
+        renderAlerts();
+        updateStats();
+      } catch(e) { console.warn(e); }
+    }
+
+    function updateStats() {
+      document.getElementById('totalAlerts').textContent = allAlerts.length;
+      document.getElementById('activeAlerts').textContent = allAlerts.filter(a => !a.triggered).length;
+      document.getElementById('triggeredAlerts').textContent = allAlerts.filter(a => a.triggered).length;
+    }
+
+    function renderAlerts() {
+      let list = [...allAlerts];
+      if (currentFilter === 'active') list = list.filter(a => !a.triggered);
+      if (currentFilter === 'triggered') list = list.filter(a => a.triggered);
+      if (currentFilter === 'above') list = list.filter(a => a.type === 'above');
+      if (currentFilter === 'below') list = list.filter(a => a.type === 'below');
+
+      const box = document.getElementById('alertsContainer');
+      if (!list.length) {
+        box.innerHTML = `<div class="empty-state"><div class="empty-icon"><i class="fas fa-bell-slash"></i></div><div class="empty-title">No alerts yet</div><div class="empty-sub">Create your first alert with the button above</div></div>`;
+        return;
+      }
+
+      box.innerHTML = list.map((a, i) => {
+        const sym = a.cryptoName || a.cryptoId?.toUpperCase() || '?';
+        const abr = sym.slice(0, 4);
+        const isAb = a.type === 'above';
+        const typBadge = isAb ? `<span class="badge badge-above">↑ ABOVE</span>` : `<span class="badge badge-below">↓ BELOW</span>`;
+        const stBadge = a.triggered ? `<span class="badge badge-triggered">✓ TRIGGERED</span>` : `<span class="badge badge-active">● ACTIVE</span>`;
+        const metrics = [
+          { label: 'Live Price', val: a.currentPrice ? fmtPx(a.currentPrice) : '—', cls: '' },
+          { label: 'Target', val: fmtPx(a.targetPrice), cls: isAb ? 'jade' : 'red' }
+        ];
+        if (a.triggeredPrice) metrics.push({ label: 'Hit At', val: fmtPx(a.triggeredPrice), cls: 'jade' });
+
+        return `<div class="alert-card ${a.triggered ? 'is-triggered' : ''}" style="animation-delay:${i * 0.06}s">
+          <div class="alert-inner">
+            <div class="alert-top">
+              <div class="alert-left">
+                <div class="coin-badge">${abr}</div>
+                <div class="coin-info">
+                  <div class="coin-pair">${sym}<span style="color:var(--t3);font-weight:400;">/USDT</span></div>
+                  <div class="coin-sub">${a.recurring !== 'once' ? a.recurring?.toUpperCase() + ' · ' : ''}PRICE ${a.type?.toUpperCase()}</div>
+                </div>
+              </div>
+              <div class="alert-badges">${typBadge} ${stBadge}</div>
+            </div>
+            <div class="alert-metrics">
+              ${metrics.map(m => `<div class="metric"><div class="metric-label">${m.label}</div><div class="metric-value ${m.cls}">${m.val}</div></div>`).join('')}
+            </div>
+            <div class="alert-footer">
+              <div class="alert-note">${a.note ? '"' + a.note + '"' : ''}</div>
+              <div class="alert-actions">
+                ${a.triggered ? `<button class="action-btn reactivate" onclick="reactivateAlert(${a.id})"><i class="fas fa-sync-alt"></i> Reactivate</button>` : ''}
+                <button class="action-btn edit" onclick="editAlert(${a.id})"><i class="fas fa-pen"></i></button>
+                <button class="action-btn del" onclick="deleteAlert(${a.id})"><i class="fas fa-trash"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    async function deleteAlert(id) {
+      if (!confirm('Delete this alert?')) return;
+      try {
+        await fetch(`/api/alerts/${user.id}/${id}`, { method: 'DELETE' });
+        showToast('Alert deleted');
+        loadAlerts();
+      } catch { showToast('Delete failed'); }
+    }
+
+    async function reactivateAlert(id) {
+      try {
+        await fetch(`/api/alerts/${user.id}/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ triggered: false, triggeredPrice: null })
+        });
+        showToast('Alert reactivated');
+        loadAlerts();
+      } catch { showToast('Reactivate failed'); }
+    }
+
+    async function saveAlert() {
+      const coin = document.getElementById('selectedCoin').value;
+      const price = parseFloat(document.getElementById('targetPrice').value);
+      if (!coin) { showToast('⚠ Select a coin first'); return; }
+      if (!price || isNaN(price)) { showToast('⚠ Enter a valid target price'); return; }
+      
+      const payload = {
+        cryptoId: coin.toLowerCase(), cryptoName: coin.toUpperCase(),
+        targetPrice: price, type: currentType,
+        recurring: currentRecurring,
+        note: document.getElementById('alertNote').value,
+        notificationChannels: ['telegram']
+      };
+      
+      try {
+        if (editingAlertId) {
+          await fetch(`/api/alerts/${user.id}/${editingAlertId}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+          });
+          showToast('Alert updated');
+        } else {
+          await fetch('/api/alerts', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: user.id, alert: payload })
+          });
+          showToast('Alert created ✓');
+        }
+        closeModal();
+        loadAlerts();
+      } catch { showToast('Failed to save'); }
+    }
+
+    function openCreateModal() {
+      editingAlertId = null;
+      document.getElementById('modalEyebrow').textContent = 'New Alert';
+      document.getElementById('modalTitle').textContent = 'Set Price Target';
+      document.getElementById('btnSave').textContent = 'Create Alert';
+      resetModal();
+      document.getElementById('modalOverlay').classList.add('open');
+    }
+
+    function editAlert(id) {
+      const a = allAlerts.find(x => x.id === id);
+      if (!a) return;
+      editingAlertId = id;
+      document.getElementById('modalEyebrow').textContent = 'Edit Alert';
+      document.getElementById('modalTitle').textContent = 'Modify Target';
+      document.getElementById('btnSave').textContent = 'Save Changes';
+      resetModal();
+      selectType(a.type, document.querySelector(`.type-opt[data-type="${a.type}"]`));
+      onCoinSelected(a.cryptoName || a.cryptoId?.toUpperCase());
+      document.getElementById('targetPrice').value = a.targetPrice;
+      setRecurring(a.recurring || 'once');
+      document.getElementById('alertNote').value = a.note || '';
+      document.getElementById('modalOverlay').classList.add('open');
+    }
+
+    function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
+
+    function resetModal() {
+      document.querySelectorAll('.type-opt').forEach(o => o.classList.remove('sel', 'sel-red'));
+      document.querySelector('.type-opt[data-type="above"]').classList.add('sel');
+      currentType = 'above';
+      document.getElementById('coinSearch').value = '';
+      document.getElementById('selectedCoin').value = '';
+      document.getElementById('targetPrice').value = '';
+      document.getElementById('alertNote').value = '';
+      document.getElementById('priceChip').style.display = 'none';
+      document.getElementById('searchDropdown').style.display = 'none';
+      setRecurring('once');
+      currentCoinPrice = 0;
+    }
+
+    function setRecurring(val) {
+      document.querySelectorAll('.recur-pill').forEach(b => b.classList.toggle('active', b.dataset.recurring === val));
+      currentRecurring = val;
+    }
+
+    const coinSearch = document.getElementById('coinSearch');
+    const dropDown = document.getElementById('searchDropdown');
+
+    coinSearch.addEventListener('input', async () => {
+      const q = coinSearch.value.toUpperCase().trim();
+      if (q.length < 1) { dropDown.style.display = 'none'; return; }
+      const matches = allCoins.filter(c => c.includes(q)).slice(0, 8);
+      if (!matches.length) { dropDown.style.display = 'none'; return; }
+      const withPrices = await Promise.all(matches.map(async sym => {
+        const p = await fetchCoinPrice(sym);
+        return { sym, p };
+      }));
+      dropDown.innerHTML = withPrices.map(({ sym, p }) => `<div class="search-item" onclick="onCoinSelected('${sym}')"><span class="search-item-sym">${sym}/USDT</span>${p ? `<span class="search-item-price">${fmtPx(p)}</span>` : ''}</div>`).join('');
+      dropDown.style.display = 'block';
+    });
+
+    document.addEventListener('click', e => {
+      if (!coinSearch.contains(e.target) && !dropDown.contains(e.target)) dropDown.style.display = 'none';
+    });
+
+    document.querySelectorAll('.recur-pill').forEach(btn => {
+      btn.addEventListener('click', () => setRecurring(btn.dataset.recurring));
+    });
+
+    document.querySelectorAll('.filter-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.dataset.filter;
+        renderAlerts();
+      });
+    });
+
+    async function refreshPrices() {
+      const syms = [...new Set(allAlerts.map(a => a.cryptoName).filter(Boolean))];
+      for (const s of syms) {
+        const p = await fetchCoinPrice(s);
+        if (p) allAlerts.forEach(a => { if (a.cryptoName === s) a.currentPrice = p; });
+      }
+      renderAlerts();
+    }
+
+    async function sendTestAlert() {
+      try {
+        const res = await fetch('/api/notifications/test', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ coin: 'BTC', targetPrice: 100000, currentPrice: 105000, direction: 'above' })
+        });
+        const data = await res.json();
+        showToast(data.telegram > 0 ? `✓ Test sent to ${data.telegram} subscriber${data.telegram > 1 ? 's' : ''}` : '⚠ No Telegram subscribers — send /start to the bot first');
+      } catch { showToast('Failed to send test'); }
+    }
+
+    let toastTimer;
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+    }
+
+    window.logout = async () => {
+      try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {}
+      localStorage.clear();
+      window.location.href = '/';
+    };
+
+    try {
+      const socket = io();
+      socket.on(`alertTriggered_${user.id}`, alert => {
+        showToast(`🔔 ${alert.cryptoName} hit $${alert.targetPrice.toLocaleString()}`);
+        loadAlerts();
+      });
+    } catch {}
+
+    (async () => {
+      await loadCoins();
+      await loadAlerts();
+      await refreshPrices();
+      setInterval(refreshPrices, 15000);
+      setInterval(loadAlerts, 30000);
+    })();
+  </script>
+</body>
+</html>
