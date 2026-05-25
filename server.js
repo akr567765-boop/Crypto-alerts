@@ -25,7 +25,7 @@ if (!fs.existsSync(DATA_DIR)) {
 
 let telegramChatIds = new Set();
 let userAlerts = new Map();
-let userCredentials = new Map(); // Store email -> userId mapping
+let userCredentials = new Map();
 
 function loadData() {
   try {
@@ -134,26 +134,57 @@ async function pollTelegram() {
   setTimeout(pollTelegram, 3000);
 }
 
-// Price fetching
+// Price fetching - WITH DEBUG LOGGING
 let priceCache = new Map();
 let currentBtcPrice = null;
+let priceFetchAttempts = 0;
+let priceFetchSuccesses = 0;
 
 async function fetchPrice(symbol) {
   const upperSymbol = symbol.toUpperCase();
   const now = Date.now();
+  
+  // Check cache first
   if (priceCache.has(upperSymbol) && now - priceCache.get(upperSymbol).time < 10000) {
+    console.log(`📦 Cache hit for ${upperSymbol}: $${priceCache.get(upperSymbol).price}`);
     return priceCache.get(upperSymbol).price;
   }
+  
+  priceFetchAttempts++;
+  console.log(`🌐 Fetching ${upperSymbol} from Binance (attempt #${priceFetchAttempts})...`);
+  
   try {
-    const res = await axios.get(`https://api.binance.com/api/v3/ticker/price?symbol=${upperSymbol}USDT`, { timeout: 5000 });
+    const url = `https://api.binance.com/api/v3/ticker/price?symbol=${upperSymbol}USDT`;
+    console.log(`   URL: ${url}`);
+    
+    const res = await axios.get(url, { timeout: 5000 });
     const price = parseFloat(res.data.price);
-    if (price && !isNaN(price)) {
+    
+    if (price && !isNaN(price) && price > 0) {
+      priceFetchSuccesses++;
       priceCache.set(upperSymbol, { price, time: now });
       if (upperSymbol === 'BTC') currentBtcPrice = price;
+      console.log(`✅ Fetched ${upperSymbol}: $${price} (success rate: ${priceFetchSuccesses}/${priceFetchAttempts})`);
       return price;
+    } else {
+      console.log(`❌ Invalid price for ${upperSymbol}: ${res.data.price}`);
+      return null;
     }
-  } catch(e) {}
-  return null;
+  } catch(e) {
+    console.error(`❌ Price fetch FAILED for ${upperSymbol}:`);
+    console.error(`   Error: ${e.message}`);
+    if (e.response) {
+      console.error(`   Status: ${e.response.status}`);
+      console.error(`   Data:`, e.response.data);
+    }
+    if (e.code === 'ENOTFOUND') {
+      console.error(`   DNS lookup failed - possible network block`);
+    }
+    if (e.code === 'ECONNABORTED') {
+      console.error(`   Request timeout - Binance may be blocking Railway IP`);
+    }
+    return null;
+  }
 }
 
 // Alert checking
@@ -167,11 +198,13 @@ async function checkAlerts() {
   checkCount++;
   
   const now = Date.now();
-  if (now - lastLogTime > 60000) {
-    let total = 0;
-    for (const alerts of userAlerts.values()) total += alerts.length;
+  let totalAlerts = 0;
+  for (const alerts of userAlerts.values()) totalAlerts += alerts.length;
+  
+  if (now - lastLogTime > 60000 || checkCount % 6 === 0) {
     console.log(`\n🔍 Alert check #${checkCount} at ${new Date().toLocaleTimeString()}`);
-    console.log(`   Active: ${total}, Subscribers: ${telegramChatIds.size}`);
+    console.log(`   Active alerts: ${totalAlerts}, Subscribers: ${telegramChatIds.size}`);
+    console.log(`   Price fetch stats: ${priceFetchSuccesses}/${priceFetchAttempts} successful`);
     lastLogTime = now;
   }
   
@@ -183,8 +216,15 @@ async function checkAlerts() {
         continue;
       }
       
+      console.log(`   Checking alert: ${alert.cryptoName} ${alert.type} target $${alert.targetPrice}`);
+      
       const price = await fetchPrice(alert.cryptoName);
-      if (!price) continue;
+      if (!price) {
+        console.log(`   ⚠️ Could not fetch price for ${alert.cryptoName}, skipping`);
+        continue;
+      }
+      
+      console.log(`   Current ${alert.cryptoName} price: $${price}, Target: $${alert.targetPrice}`);
       
       let shouldTrigger = false;
       let condition = '';
@@ -200,6 +240,7 @@ async function checkAlerts() {
       
       if (shouldTrigger) {
         console.log(`\n🎯 ${alert.cryptoName} ${condition}`);
+        console.log(`🚨 TRIGGERING ALERT!`);
         
         const message = `🚨 *PRICE ALERT!*\n\n📊 *${alert.cryptoName}/USDT*\n💰 *Current:* $${price.toLocaleString()}\n🎯 *Target:* ${alert.type === 'above' ? '📈 ABOVE' : '📉 BELOW'} $${alert.targetPrice.toLocaleString()}\n\n🕐 ${new Date().toLocaleString()}`;
         
@@ -222,6 +263,8 @@ async function checkAlerts() {
         
         if (sent > 0) {
           console.log(`   ✅ Alert sent to ${sent} subscribers`);
+        } else {
+          console.log(`   ⚠️ No subscribers to send to!`);
         }
       }
     }
@@ -229,18 +272,16 @@ async function checkAlerts() {
   isChecking = false;
 }
 
-setInterval(checkAlerts, 10000);
-console.log('✅ Price monitoring active');
+setInterval(checkAlerts, 15000); // Check every 15 seconds
+console.log('✅ Price monitoring active (checking every 15 seconds)');
 
 // ============================================================
-// AUTH ROUTES - FIXED: Consistent user ID
+// AUTH ROUTES
 // ============================================================
 
-// Signup - Create a persistent user ID
 app.post('/api/auth/signup', (req, res) => {
   const { email, password, username } = req.body;
   
-  // Check if user already exists
   if (userCredentials.has(email)) {
     const userId = userCredentials.get(email);
     console.log(`📝 Existing user signed up again: ${email} (${userId})`);
@@ -250,7 +291,6 @@ app.post('/api/auth/signup', (req, res) => {
     });
   }
   
-  // Create new user with consistent ID
   const userId = crypto.randomUUID ? crypto.randomUUID() : 'user_' + Date.now() + '_' + email.replace(/[^a-zA-Z0-9]/g, '');
   userCredentials.set(email, userId);
   saveData();
@@ -262,15 +302,12 @@ app.post('/api/auth/signup', (req, res) => {
   });
 });
 
-// Login - Return the same user ID every time
 app.post('/api/auth/login', (req, res) => {
   const { email, password } = req.body;
   
-  // Get existing user ID or create new one
   let userId = userCredentials.get(email);
   
   if (!userId) {
-    // First time login - create user
     userId = crypto.randomUUID ? crypto.randomUUID() : 'user_' + Date.now() + '_' + email.replace(/[^a-zA-Z0-9]/g, '');
     userCredentials.set(email, userId);
     saveData();
@@ -374,7 +411,12 @@ app.get('/api/telegram/status', (req, res) => {
     subscribers: telegramChatIds.size,
     alerts: total,
     users: userCredentials.size,
-    storagePath: DATA_DIR
+    storagePath: DATA_DIR,
+    priceFetchStats: {
+      attempts: priceFetchAttempts,
+      successes: priceFetchSuccesses,
+      successRate: priceFetchAttempts > 0 ? (priceFetchSuccesses / priceFetchAttempts * 100).toFixed(1) : 0
+    }
   });
 });
 
@@ -387,6 +429,17 @@ app.get('/api/health', (req, res) => {
     alerts: total,
     users: userCredentials.size
   });
+});
+
+// Price endpoint for frontend
+app.get('/api/price/:symbol', async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  const price = await fetchPrice(symbol);
+  if (price) {
+    res.json({ symbol, price });
+  } else {
+    res.status(404).json({ error: 'Could not fetch price' });
+  }
 });
 
 // HTML routes
@@ -403,6 +456,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`💾 Persistent storage: ${DATA_DIR}`);
   console.log(`📱 Subscribers: ${telegramChatIds.size}`);
   console.log(`👤 Users: ${userCredentials.size}`);
-  console.log(`✅ Monitoring active\n`);
+  console.log(`✅ Price monitoring active (checking every 15 seconds)`);
+  console.log(`\n📊 Waiting for price fetches...\n`);
   setTimeout(pollTelegram, 2000);
 });
