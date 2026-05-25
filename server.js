@@ -4,6 +4,7 @@ const cors = require('cors');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const app = express();
@@ -13,11 +14,10 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('.'));
 
-// Use persistent volume if available, otherwise fallback to local
+// Persistent storage
 const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || '/app/data';
 const DATA_FILE = path.join(DATA_DIR, 'data.json');
 
-// Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   console.log(`📁 Created data directory: ${DATA_DIR}`);
@@ -25,6 +25,7 @@ if (!fs.existsSync(DATA_DIR)) {
 
 let telegramChatIds = new Set();
 let userAlerts = new Map();
+let userCredentials = new Map(); // Store email -> userId mapping
 
 function loadData() {
   try {
@@ -32,9 +33,11 @@ function loadData() {
       const parsed = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
       telegramChatIds = new Set(parsed.telegramChatIds || []);
       userAlerts = new Map(Object.entries(parsed.userAlerts || {}));
+      userCredentials = new Map(Object.entries(parsed.userCredentials || {}));
       console.log(`\n📦 Loaded from persistent storage:`);
       console.log(`   📱 Subscribers: ${telegramChatIds.size}`);
       console.log(`   🔔 Alert sets: ${userAlerts.size}`);
+      console.log(`   👤 Users: ${userCredentials.size}`);
     } else {
       console.log(`📁 No existing data file, starting fresh`);
       saveData();
@@ -47,15 +50,16 @@ function saveData() {
     const payload = {
       telegramChatIds: Array.from(telegramChatIds),
       userAlerts: Object.fromEntries(userAlerts),
+      userCredentials: Object.fromEntries(userCredentials),
       lastSaved: new Date().toISOString()
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(payload, null, 2));
-    console.log(`💾 Data saved to persistent storage`);
+    console.log(`💾 Data saved`);
   } catch(e) { console.error('Save error:', e.message); }
 }
 
 loadData();
-setInterval(saveData, 30000); // Save every 30 seconds
+setInterval(saveData, 30000);
 
 // Telegram
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -228,14 +232,81 @@ async function checkAlerts() {
 setInterval(checkAlerts, 10000);
 console.log('✅ Price monitoring active');
 
-// Routes
+// ============================================================
+// AUTH ROUTES - FIXED: Consistent user ID
+// ============================================================
+
+// Signup - Create a persistent user ID
+app.post('/api/auth/signup', (req, res) => {
+  const { email, password, username } = req.body;
+  
+  // Check if user already exists
+  if (userCredentials.has(email)) {
+    const userId = userCredentials.get(email);
+    console.log(`📝 Existing user signed up again: ${email} (${userId})`);
+    return res.json({ 
+      user: { id: userId, email: email, user_metadata: { username: username || email.split('@')[0] } }, 
+      session: { access_token: 'mock-token-' + userId }
+    });
+  }
+  
+  // Create new user with consistent ID
+  const userId = crypto.randomUUID ? crypto.randomUUID() : 'user_' + Date.now() + '_' + email.replace(/[^a-zA-Z0-9]/g, '');
+  userCredentials.set(email, userId);
+  saveData();
+  
+  console.log(`✅ New user signed up: ${email} (${userId})`);
+  res.json({ 
+    user: { id: userId, email: email, user_metadata: { username: username || email.split('@')[0] } }, 
+    session: { access_token: 'mock-token-' + userId }
+  });
+});
+
+// Login - Return the same user ID every time
+app.post('/api/auth/login', (req, res) => {
+  const { email, password } = req.body;
+  
+  // Get existing user ID or create new one
+  let userId = userCredentials.get(email);
+  
+  if (!userId) {
+    // First time login - create user
+    userId = crypto.randomUUID ? crypto.randomUUID() : 'user_' + Date.now() + '_' + email.replace(/[^a-zA-Z0-9]/g, '');
+    userCredentials.set(email, userId);
+    saveData();
+    console.log(`🆕 New user from login: ${email} (${userId})`);
+  } else {
+    console.log(`🔐 User logged in: ${email} (${userId})`);
+  }
+  
+  res.json({ 
+    user: { id: userId, email: email, user_metadata: { username: email.split('@')[0] } }, 
+    session: { access_token: 'mock-token-' + userId }
+  });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  res.json({ success: true });
+});
+
+// ============================================================
+// ALERT ROUTES
+// ============================================================
+
 app.get('/api/alerts/:userId', (req, res) => {
-  res.json(userAlerts.get(req.params.userId) || []);
+  const userId = req.params.userId;
+  const alerts = userAlerts.get(userId) || [];
+  console.log(`📋 Returning ${alerts.length} alerts for user ${userId}`);
+  res.json(alerts);
 });
 
 app.post('/api/alerts', (req, res) => {
   const { userId, alert } = req.body;
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
   if (!userAlerts.has(userId)) userAlerts.set(userId, []);
+  
   const newAlert = {
     id: Date.now(),
     cryptoId: alert.cryptoId,
@@ -249,15 +320,18 @@ app.post('/api/alerts', (req, res) => {
   };
   userAlerts.get(userId).push(newAlert);
   saveData();
-  console.log(`✅ Alert created: ${newAlert.cryptoName} ${newAlert.type} $${newAlert.targetPrice}`);
+  console.log(`✅ Alert created for user ${userId}: ${newAlert.cryptoName} ${newAlert.type} $${newAlert.targetPrice}`);
   res.json(newAlert);
 });
 
 app.delete('/api/alerts/:userId/:alertId', (req, res) => {
   const { userId, alertId } = req.params;
   if (userAlerts.has(userId)) {
+    const before = userAlerts.get(userId).length;
     userAlerts.set(userId, userAlerts.get(userId).filter(a => a.id !== parseInt(alertId)));
+    const after = userAlerts.get(userId).length;
     saveData();
+    console.log(`🗑️ Alert deleted for user ${userId} (${before} -> ${after})`);
   }
   res.json({ success: true });
 });
@@ -271,11 +345,16 @@ app.put('/api/alerts/:userId/:alertId', (req, res) => {
     if (index !== -1) {
       alerts[index] = { ...alerts[index], ...updates };
       saveData();
+      console.log(`✏️ Alert updated for user ${userId}`);
       res.json(alerts[index]);
     }
   }
   res.json({ success: true });
 });
+
+// ============================================================
+// OTHER ROUTES
+// ============================================================
 
 app.get('/api/notifications/stats', (req, res) => {
   res.json({ telegram: { active: telegramChatIds.size } });
@@ -294,6 +373,7 @@ app.get('/api/telegram/status', (req, res) => {
     configured: !!BOT_TOKEN,
     subscribers: telegramChatIds.size,
     alerts: total,
+    users: userCredentials.size,
     storagePath: DATA_DIR
   });
 });
@@ -305,19 +385,8 @@ app.get('/api/health', (req, res) => {
     status: 'healthy', 
     subscribers: telegramChatIds.size,
     alerts: total,
-    storage: DATA_DIR
+    users: userCredentials.size
   });
-});
-
-// Auth routes (mock)
-app.post('/api/auth/signup', (req, res) => {
-  res.json({ user: { id: 'user-1', email: req.body.email }, session: { access_token: 'mock' } });
-});
-app.post('/api/auth/login', (req, res) => {
-  res.json({ user: { id: 'user-1', email: req.body.email }, session: { access_token: 'mock' } });
-});
-app.post('/api/auth/logout', (req, res) => {
-  res.json({ success: true });
 });
 
 // HTML routes
@@ -333,6 +402,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 Server on port ${PORT}`);
   console.log(`💾 Persistent storage: ${DATA_DIR}`);
   console.log(`📱 Subscribers: ${telegramChatIds.size}`);
+  console.log(`👤 Users: ${userCredentials.size}`);
   console.log(`✅ Monitoring active\n`);
   setTimeout(pollTelegram, 2000);
 });
