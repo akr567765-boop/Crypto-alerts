@@ -49,7 +49,6 @@ function saveData() {
       userCredentials: Object.fromEntries(userCredentials),
       lastSaved: new Date().toISOString()
     }, null, 2));
-    console.log(`💾 Data saved`);
   } catch(e) { console.error('Save error:', e.message); }
 }
 
@@ -66,15 +65,9 @@ async function tgSend(chatId, text, markdown = false) {
     const body = { chat_id: chatId, text };
     if (markdown) body.parse_mode = 'Markdown';
     const res = await axios.post(`${TG_BASE}/sendMessage`, body, { timeout: 15000 });
-    if (res.data.ok) { 
-      console.log(`✅ Sent to ${chatId}`); 
-      return true; 
-    }
+    if (res.data.ok) { console.log(`✅ Sent to ${chatId}`); return true; }
   } catch(e) {
-    if (e.response?.data?.error_code === 403) { 
-      telegramChatIds.delete(chatId); 
-      saveData(); 
-    }
+    if (e.response?.data?.error_code === 403) { telegramChatIds.delete(chatId); saveData(); }
   }
   return false;
 }
@@ -107,19 +100,16 @@ async function pollTelegram() {
         const text = msg.text.trim().toLowerCase();
         const name = msg.from?.first_name || 'User';
         console.log(`📩 TG from ${chatId}: "${msg.text}"`);
-        
         if (text === '/start') {
-          telegramChatIds.add(chatId); 
-          saveData();
-          await tgSend(chatId, `✅ *Welcome ${name}!*\n\nYou are subscribed to CryptoFlow alerts.\n\nSend /test to verify.`, true);
+          telegramChatIds.add(chatId); saveData();
+          await tgSend(chatId, `✅ *Welcome ${name}!*\n\nSubscribed to CryptoFlow alerts.\n\nSend /test to verify.`, true);
         } else if (text === '/stop') {
-          telegramChatIds.delete(chatId); 
-          saveData();
+          telegramChatIds.delete(chatId); saveData();
           await tgSend(chatId, `❌ Unsubscribed. Send /start to resubscribe.`);
         } else if (text === '/status') {
           await tgSend(chatId, telegramChatIds.has(chatId) ? `✅ Subscribed!` : `❌ Not subscribed.`);
         } else if (text === '/test') {
-          await tgSend(chatId, `🔔 *TEST ALERT*\n\n✅ Your Telegram is working!`, true);
+          await tgSend(chatId, `🔔 *TEST ALERT*\n\n✅ Telegram is working!`, true);
         }
       }
     }
@@ -140,6 +130,9 @@ const COIN_MAP = {
   'BNB': { kraken: null,     coingecko: 'binancecoin' },
   'ADA': { kraken: 'ADAUSD', coingecko: 'cardano' },
   'DOGE': { kraken: 'XDGUSD', coingecko: 'dogecoin' },
+  'AVAX': { kraken: 'AVAXUSD', coingecko: 'avalanche-2' },
+  'DOT': { kraken: 'DOTUSD', coingecko: 'polkadot' },
+  'MATIC': { kraken: 'MATICUSD', coingecko: 'matic-network' },
 };
 
 async function fetchFromKraken(symbol) {
@@ -148,15 +141,12 @@ async function fetchFromKraken(symbol) {
   try {
     const res = await axios.get(`https://api.kraken.com/0/public/Ticker?pair=${mapping.kraken}`, { timeout: 5000 });
     if (res.data.error?.length) return null;
-    const pairData = Object.values(res.data.result)[0];
-    const price = parseFloat(pairData.c[0]);
+    const price = parseFloat(Object.values(res.data.result)[0].c[0]);
     if (price && !isNaN(price)) {
       console.log(`💲 Kraken ${symbol}: $${price}`);
       return price;
     }
-  } catch(e) { 
-    console.log(`⚠️ Kraken failed for ${symbol}: ${e.message}`); 
-  }
+  } catch(e) { console.log(`⚠️ Kraken failed for ${symbol}: ${e.message}`); }
   return null;
 }
 
@@ -170,20 +160,16 @@ async function fetchFromCoinGecko(symbol) {
       console.log(`💲 CoinGecko ${symbol}: $${price}`);
       return price;
     }
-  } catch(e) { 
-    console.log(`⚠️ CoinGecko failed for ${symbol}: ${e.message}`); 
-  }
+  } catch(e) { console.log(`⚠️ CoinGecko failed for ${symbol}: ${e.message}`); }
   return null;
 }
 
 async function fetchPrice(symbol) {
   const upperSymbol = symbol.toUpperCase();
   const now = Date.now();
-  
   if (priceCache.has(upperSymbol) && now - priceCache.get(upperSymbol).time < 15000) {
     return priceCache.get(upperSymbol).price;
   }
-  
   const price = await fetchFromKraken(upperSymbol) || await fetchFromCoinGecko(upperSymbol);
   if (price) {
     priceCache.set(upperSymbol, { price, time: now });
@@ -225,21 +211,19 @@ async function checkAlerts() {
       if (alert.type === 'below' && price <= alert.targetPrice) shouldTrigger = true;
 
       if (shouldTrigger) {
-        console.log(`\n🎯 TRIGGERED: ${alert.cryptoName} ${alert.type} target:$${alert.targetPrice} (current: $${price})`);
-        
-        const message = `🚨 *PRICE ALERT!*\n\n📊 *${alert.cryptoName}/USDT*\n💰 *Current:* $${price.toLocaleString()}\n🎯 *Target:* ${alert.type === 'above' ? '📈 ABOVE' : '📉 BELOW'} $${alert.targetPrice.toLocaleString()}\n\n🕐 ${new Date().toLocaleString()}\n\n_CryptoFlow Alerts_`;
-        
+        console.log(`\n🎯 TRIGGERED: ${alert.cryptoName} ${alert.type} $${alert.targetPrice} (current: $${price})`);
+        const message = `🚨 *PRICE ALERT!*\n\n📊 *${alert.cryptoName}/USDT*\n💰 *Current:* $${price.toLocaleString()}\n🎯 *Target:* ${alert.type === 'above' ? '📈 ABOVE' : '📉 BELOW'} $${alert.targetPrice.toLocaleString()}\n\n🕐 ${new Date().toLocaleString()}`;
         const sent = await tgBroadcast(message, true);
-        if (sent > 0) console.log(`   ✅ Alert sent to ${sent} subscriber(s)`);
+        if (sent > 0) console.log(`   ✅ Sent to ${sent} subscribers`);
 
         if (alert.recurring === 'always') {
           // never mark triggered
         } else if (alert.recurring === 'hourly') {
           alert.triggered = true; saveData();
-          setTimeout(() => { alert.triggered = false; saveData(); console.log(`🔄 Hourly reset for ${alert.cryptoName}`); }, 3600000);
+          setTimeout(() => { alert.triggered = false; saveData(); }, 3600000);
         } else if (alert.recurring === 'daily') {
           alert.triggered = true; saveData();
-          setTimeout(() => { alert.triggered = false; saveData(); console.log(`🔄 Daily reset for ${alert.cryptoName}`); }, 86400000);
+          setTimeout(() => { alert.triggered = false; saveData(); }, 86400000);
         } else {
           alert.triggered = true; saveData();
         }
@@ -252,25 +236,19 @@ async function checkAlerts() {
 setInterval(checkAlerts, 10000);
 console.log('✅ Price monitoring active (Kraken + CoinGecko fallback)');
 
-// ============================================================
-// API ROUTES
-// ============================================================
-
+// Alert routes
 app.get('/api/alerts/:userId', (req, res) => {
-  const alerts = userAlerts.get(req.params.userId) || [];
-  console.log(`📋 Returning ${alerts.length} alerts for user ${req.params.userId}`);
-  res.json(alerts);
+  res.json(userAlerts.get(req.params.userId) || []);
 });
 
 app.post('/api/alerts', (req, res) => {
   const { userId, alert } = req.body;
   if (!userId) return res.status(400).json({ error: 'userId required' });
   if (!userAlerts.has(userId)) userAlerts.set(userId, []);
-  
   const newAlert = {
     id: Date.now(),
     cryptoId: alert.cryptoId,
-    cryptoName: alert.cryptoName.toUpperCase(),
+    cryptoName: alert.cryptoName,
     targetPrice: alert.targetPrice,
     type: alert.type,
     recurring: alert.recurring || 'once',
@@ -280,7 +258,7 @@ app.post('/api/alerts', (req, res) => {
   };
   userAlerts.get(userId).push(newAlert);
   saveData();
-  console.log(`✅ Alert created: ${newAlert.cryptoName} ${newAlert.type} $${newAlert.targetPrice}`);
+  console.log(`✅ Alert created for ${userId}: ${newAlert.cryptoName} ${newAlert.type} $${newAlert.targetPrice}`);
   res.json(newAlert);
 });
 
@@ -289,7 +267,6 @@ app.delete('/api/alerts/:userId/:alertId', (req, res) => {
   if (userAlerts.has(userId)) {
     userAlerts.set(userId, userAlerts.get(userId).filter(a => a.id !== parseInt(alertId)));
     saveData();
-    console.log(`🗑️ Alert ${alertId} deleted`);
   }
   res.json({ success: true });
 });
@@ -302,30 +279,24 @@ app.put('/api/alerts/:userId/:alertId', (req, res) => {
     if (index !== -1) {
       alerts[index] = { ...alerts[index], ...req.body };
       saveData();
-      console.log(`✏️ Alert ${alertId} updated`);
       return res.json(alerts[index]);
     }
   }
   res.json({ success: true });
 });
 
+// Auth routes
 app.post('/api/auth/signup', (req, res) => {
-  const { email, username } = req.body;
+  const { email, password, username } = req.body;
   if (userCredentials.has(email)) {
     const userId = userCredentials.get(email);
-    return res.json({ 
-      user: { id: userId, email, user_metadata: { username: username || email.split('@')[0] } }, 
-      session: { access_token: 'mock-' + userId } 
-    });
+    return res.json({ user: { id: userId, email, user_metadata: { username: username || email.split('@')[0] } }, session: { access_token: 'mock-' + userId } });
   }
   const userId = crypto.randomUUID();
   userCredentials.set(email, userId);
   saveData();
   console.log(`📝 New user: ${email} (${userId})`);
-  res.json({ 
-    user: { id: userId, email, user_metadata: { username: username || email.split('@')[0] } }, 
-    session: { access_token: 'mock-' + userId } 
-  });
+  res.json({ user: { id: userId, email, user_metadata: { username: username || email.split('@')[0] } }, session: { access_token: 'mock-' + userId } });
 });
 
 app.post('/api/auth/login', (req, res) => {
@@ -339,48 +310,31 @@ app.post('/api/auth/login', (req, res) => {
   } else {
     console.log(`🔐 Login: ${email} (${userId})`);
   }
-  res.json({ 
-    user: { id: userId, email, user_metadata: { username: email.split('@')[0] } }, 
-    session: { access_token: 'mock-' + userId } 
-  });
+  res.json({ user: { id: userId, email, user_metadata: { username: email.split('@')[0] } }, session: { access_token: 'mock-' + userId } });
 });
 
 app.post('/api/auth/logout', (req, res) => res.json({ success: true }));
 
-app.get('/api/notifications/stats', (req, res) => {
-  res.json({ telegram: { active: telegramChatIds.size } });
-});
+// Other routes
+app.get('/api/notifications/stats', (req, res) => res.json({ telegram: { active: telegramChatIds.size } }));
 
 app.post('/api/notifications/test', async (req, res) => {
-  console.log(`🧪 Test alert to ${telegramChatIds.size} subscribers`);
-  const sent = await tgBroadcast(`🔔 *TEST ALERT*\n\n✅ Your Telegram is working!\n\nBTC: $${currentBtcPrice || 'loading...'}`, true);
+  const sent = await tgBroadcast(`🔔 *TEST ALERT*\n\n✅ Telegram working!\n\nBTC: $${currentBtcPrice || 'loading...'}`, true);
   res.json({ success: true, telegram: sent });
 });
 
 app.get('/api/telegram/status', (req, res) => {
   let total = 0;
   for (const alerts of userAlerts.values()) total += alerts.length;
-  res.json({ 
-    configured: !!BOT_TOKEN, 
-    subscribers: telegramChatIds.size, 
-    alerts: total, 
-    users: userCredentials.size,
-    currentBTC: currentBtcPrice
-  });
+  res.json({ configured: !!BOT_TOKEN, subscribers: telegramChatIds.size, alerts: total, users: userCredentials.size, storagePath: DATA_DIR });
 });
 
 app.get('/api/health', (req, res) => {
   let total = 0;
   for (const alerts of userAlerts.values()) total += alerts.length;
-  res.json({ 
-    status: 'healthy', 
-    subscribers: telegramChatIds.size, 
-    alerts: total,
-    btcPrice: currentBtcPrice
-  });
+  res.json({ status: 'healthy', subscribers: telegramChatIds.size, alerts: total });
 });
 
-// HTML routes
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'auth', 'login.html')));
 app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'dashboard', 'dashboard.html')));
 app.get('/alerts', (req, res) => res.sendFile(path.join(__dirname, 'alerts', 'alerts.html')));
@@ -392,6 +346,6 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 Server on port ${PORT}`);
   console.log(`💾 Storage: ${DATA_DIR}`);
   console.log(`📱 Subscribers: ${telegramChatIds.size}`);
-  console.log(`✅ Monitoring active (Kraken + CoinGecko)\n`);
+  console.log(`✅ Monitoring active\n`);
   setTimeout(pollTelegram, 2000);
 });
