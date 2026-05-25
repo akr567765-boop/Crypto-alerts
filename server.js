@@ -41,15 +41,12 @@ function loadData() {
       telegramChatIds = new Set(parsed.telegramChatIds || []);
       userAlerts = new Map(Object.entries(parsed.userAlerts || {}));
       alertHistory = parsed.alertHistory || [];
-      console.log(`\n📦 Loaded from disk:`);
-      console.log(`   📱 Telegram subscribers : ${telegramChatIds.size}`);
-      console.log(`   🔔 Alert sets           : ${userAlerts.size}\n`);
+      console.log(`\n📦 Loaded: ${telegramChatIds.size} subscribers, ${userAlerts.size} alerts`);
     } else {
       saveData();
-      console.log(`📁 Created new data.json file`);
     }
   } catch (e) {
-    console.error('⚠️ Could not load data.json:', e.message);
+    console.error('Load error:', e.message);
   }
 }
 
@@ -62,7 +59,7 @@ function saveData() {
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(payload, null, 2));
   } catch (e) {
-    console.error('⚠️ Could not save data.json:', e.message);
+    console.error('Save error:', e.message);
   }
 }
 
@@ -70,21 +67,20 @@ loadData();
 setInterval(saveData, 60000);
 
 // ============================================================
-// TELEGRAM HELPERS
+// TELEGRAM
 // ============================================================
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TG_BASE = BOT_TOKEN ? `https://api.telegram.org/bot${BOT_TOKEN}` : null;
 
-async function tgSend(chatId, text, markdown = false, retryCount = 0) {
+async function tgSend(chatId, text, markdown = false) {
   if (!TG_BASE) return false;
   
   try {
     const body = { chat_id: chatId, text };
     if (markdown) body.parse_mode = 'Markdown';
     const res = await axios.post(`${TG_BASE}/sendMessage`, body, { timeout: 15000 });
-    
     if (res.data.ok) {
-      console.log(`✅ Telegram sent to ${chatId}`);
+      console.log(`✅ TG sent to ${chatId}`);
       return true;
     }
     return false;
@@ -92,7 +88,6 @@ async function tgSend(chatId, text, markdown = false, retryCount = 0) {
     if (err.response?.data?.error_code === 403) {
       telegramChatIds.delete(chatId);
       saveData();
-      return false;
     }
     return false;
   }
@@ -105,7 +100,7 @@ async function tgBroadcast(text, markdown = false) {
   for (const chatId of telegramChatIds) {
     const ok = await tgSend(chatId, text, markdown);
     if (ok) sent++;
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(r => setTimeout(r, 100));
   }
   return sent;
 }
@@ -117,8 +112,7 @@ let lastUpdateId = 0;
 let isPolling = false;
 
 async function pollTelegram() {
-  if (!TG_BASE) return;
-  if (isPolling) return;
+  if (!TG_BASE || isPolling) return;
   isPolling = true;
 
   try {
@@ -132,32 +126,30 @@ async function pollTelegram() {
         if (!msg?.text || !msg?.chat?.id) continue;
 
         const chatId = msg.chat.id;
-        const text = (msg.text || '').trim().toLowerCase();
-        const name = msg.from?.first_name || msg.from?.username || 'there';
+        const text = msg.text.trim().toLowerCase();
+        const name = msg.from?.first_name || 'User';
 
-        console.log(`📩 Telegram from ${chatId}: "${msg.text}"`);
+        console.log(`📩 TG from ${chatId}: "${msg.text}"`);
 
         if (text === '/start') {
           telegramChatIds.add(chatId);
           saveData();
-          await tgSend(chatId,
-            `✅ *Welcome to CryptoFlow Alerts, ${name}!*\n\nYou are now subscribed to real-time price alerts.\n\nSend /test to test your connection!`,
-            true
-          );
+          console.log(`✅ Subscribed ${chatId} | Total: ${telegramChatIds.size}`);
+          await tgSend(chatId, `✅ *Welcome to CryptoFlow!*\n\nYou are now subscribed to price alerts.\n\nSend /test to verify.`, true);
         } else if (text === '/stop') {
           telegramChatIds.delete(chatId);
           saveData();
-          await tgSend(chatId, `❌ Unsubscribed. Send /start to re-subscribe.`);
+          await tgSend(chatId, `❌ Unsubscribed.`);
         } else if (text === '/status') {
           const subbed = telegramChatIds.has(chatId);
-          await tgSend(chatId, subbed ? `✅ You ARE subscribed!` : `❌ You are NOT subscribed.`);
+          await tgSend(chatId, subbed ? `✅ Subscribed!` : `❌ Not subscribed.`);
         } else if (text === '/test') {
-          await tgSend(chatId, `🔔 *TEST ALERT — CryptoFlow*\n\n✅ Your Telegram is working!`, true);
+          await tgSend(chatId, `🔔 *TEST* ✅ Your Telegram is working!`, true);
         }
       }
     }
   } catch (err) {
-    // Silent
+    // silent
   } finally {
     isPolling = false;
     setTimeout(pollTelegram, 3000);
@@ -165,53 +157,76 @@ async function pollTelegram() {
 }
 
 // ============================================================
-// SEND ALERT NOTIFICATION
+// PRICE FETCHING - Using multiple sources
+// ============================================================
+async function fetchPrice(symbol) {
+  const upperSymbol = symbol.toUpperCase();
+  
+  // Try Binance first
+  try {
+    const response = await axios.get(`https://api.binance.com/api/v3/ticker/price?symbol=${upperSymbol}USDT`, { timeout: 5000 });
+    return parseFloat(response.data.price);
+  } catch (err) {
+    console.log(`   Binance failed for ${upperSymbol}, trying CoinGecko...`);
+  }
+  
+  // Try CoinGecko as fallback
+  try {
+    const coinMap = {
+      'BTC': 'bitcoin', 'ETH': 'ethereum', 'SOL': 'solana',
+      'BNB': 'binancecoin', 'XRP': 'ripple', 'ADA': 'cardano', 'DOGE': 'dogecoin'
+    };
+    const coinId = coinMap[upperSymbol];
+    if (coinId) {
+      const response = await axios.get(`https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`, { timeout: 5000 });
+      return response.data[coinId]?.usd || null;
+    }
+  } catch (err) {
+    console.log(`   CoinGecko failed for ${upperSymbol}`);
+  }
+  
+  return null;
+}
+
+// ============================================================
+// SEND ALERT
 // ============================================================
 async function sendAlertNotification(alert, currentPrice, userId) {
   const symbol = (alert.cryptoName || alert.cryptoId || '???').toUpperCase();
-  const direction = alert.type === 'above' ? '📈 ABOVE ↑' : '📉 BELOW ↓';
+  const direction = alert.type === 'above' ? '📈 ABOVE' : '📉 BELOW';
 
-  console.log(`\n🔔 ALERT TRIGGERED! ${symbol} at $${currentPrice} (Target: $${alert.targetPrice})`);
+  console.log(`\n🔔 ALERT: ${symbol} at $${currentPrice} (Target: $${alert.targetPrice})`);
 
   const message =
-    `🚨 *PRICE ALERT TRIGGERED!*\n\n` +
+    `🚨 *PRICE ALERT!*\n\n` +
     `📊 *Coin:* ${symbol}/USDT\n` +
-    `💰 *Current Price:* $${currentPrice.toLocaleString()}\n` +
-    `🎯 *Target:* ${direction} $${alert.targetPrice.toLocaleString()}\n` +
-    `\n🕐 ${new Date().toLocaleString()}\n` +
-    `\n_CryptoFlow Alerts_`;
+    `💰 *Current:* $${currentPrice.toLocaleString()}\n` +
+    `🎯 *Target:* ${direction} $${alert.targetPrice.toLocaleString()}\n\n` +
+    `🕐 ${new Date().toLocaleString()}`;
 
-  const tgSent = await tgBroadcast(message, true);
-  console.log(`📤 Sent to ${tgSent} subscribers\n`);
-
-  alertHistory.unshift({
-    id: Date.now(),
-    symbol,
-    price: currentPrice,
-    targetPrice: alert.targetPrice,
-    type: alert.type,
-    triggeredAt: new Date().toISOString(),
-    userId,
-    telegramSent: tgSent
-  });
+  const sent = await tgBroadcast(message, true);
   
+  alertHistory.unshift({
+    id: Date.now(), symbol, price: currentPrice,
+    targetPrice: alert.targetPrice, type: alert.type,
+    triggeredAt: new Date().toISOString(), userId, telegramSent: sent
+  });
   if (alertHistory.length > 1000) alertHistory.pop();
   saveData();
+  
   io.emit(`alertTriggered_${userId}`, { ...alert, currentPrice });
 }
 
 // ============================================================
-// PRICE MONITORING - WITH PRICE LOGGING
+// PRICE MONITORING
 // ============================================================
 let isCheckingAlerts = false;
-let lastPriceLog = Date.now();
+let lastPriceTime = Date.now();
 
 async function checkAlerts() {
   if (isCheckingAlerts) return;
   isCheckingAlerts = true;
 
-  const now = Date.now();
-  
   for (const [userId, alerts] of userAlerts.entries()) {
     for (const alert of alerts) {
       if (alert.triggered && (alert.recurring === 'once' || !alert.recurring)) {
@@ -221,28 +236,23 @@ async function checkAlerts() {
       const symbol = (alert.cryptoName || alert.cryptoId || '').toUpperCase().trim();
       if (!symbol) continue;
 
-      try {
-        const response = await axios.get(
-          `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}USDT`,
-          { timeout: 5000 }
-        );
-        const currentPrice = parseFloat(response.data.price);
-        
+      const currentPrice = await fetchPrice(symbol);
+      
+      if (currentPrice && !isNaN(currentPrice)) {
         // Log price every minute
-        if (now - lastPriceLog > 60000) {
-          console.log(`📊 ${symbol} current price: $${currentPrice}`);
-          lastPriceLog = now;
+        if (Date.now() - lastPriceTime > 60000) {
+          console.log(`📊 ${symbol} price: $${currentPrice}`);
+          lastPriceTime = Date.now();
         }
         
         let shouldTrigger = false;
-        
         if (alert.type === 'above' && currentPrice >= alert.targetPrice) {
           shouldTrigger = true;
-          console.log(`🎯 ${symbol} ABOVE TRIGGER! $${currentPrice} >= $${alert.targetPrice}`);
+          console.log(`🎯 ${symbol} ABOVE! $${currentPrice} >= $${alert.targetPrice}`);
         }
         if (alert.type === 'below' && currentPrice <= alert.targetPrice) {
           shouldTrigger = true;
-          console.log(`🎯 ${symbol} BELOW TRIGGER! $${currentPrice} <= $${alert.targetPrice}`);
+          console.log(`🎯 ${symbol} BELOW! $${currentPrice} <= $${alert.targetPrice}`);
         }
 
         if (shouldTrigger) {
@@ -259,19 +269,13 @@ async function checkAlerts() {
             alert.triggered = false;
             saveData();
           } else if (alert.recurring === 'hourly') {
-            setTimeout(() => {
-              alert.triggered = false;
-              saveData();
-            }, 3600000);
+            setTimeout(() => { alert.triggered = false; saveData(); }, 3600000);
           } else if (alert.recurring === 'daily') {
-            setTimeout(() => {
-              alert.triggered = false;
-              saveData();
-            }, 86400000);
+            setTimeout(() => { alert.triggered = false; saveData(); }, 86400000);
           }
         }
-      } catch (err) {
-        // Silent
+      } else {
+        console.log(`⚠️ Could not fetch price for ${symbol}`);
       }
     }
   }
@@ -279,9 +283,8 @@ async function checkAlerts() {
   isCheckingAlerts = false;
 }
 
-// Check every 10 seconds
-setInterval(checkAlerts, 10000);
-console.log('✅ Price monitoring active (checking every 10 seconds)');
+setInterval(checkAlerts, 15000);
+console.log('✅ Price monitoring active (checking every 15 seconds)');
 
 // ============================================================
 // ROUTES
@@ -336,13 +339,12 @@ app.put('/api/alerts/:userId/:alertId', (req, res) => {
   if (userAlerts.has(userId)) {
     const alerts = userAlerts.get(userId);
     const index = alerts.findIndex(a => a.id === parseInt(alertId));
-    
     if (index !== -1) {
       alerts[index] = { ...alerts[index], ...updates };
       saveData();
       res.json(alerts[index]);
     } else {
-      res.status(404).json({ error: 'Alert not found' });
+      res.status(404).json({ error: 'Not found' });
     }
   } else {
     res.status(404).json({ error: 'User not found' });
@@ -363,9 +365,8 @@ app.get('/api/notifications/stats', (req, res) => {
 });
 
 app.post('/api/notifications/test', async (req, res) => {
-  console.log(`\n🧪 TEST ALERT to ${telegramChatIds.size} subscribers`);
-  const message = `🔔 *TEST ALERT — CryptoFlow*\n\n✅ Your Telegram notifications are working!`;
-  const sent = await tgBroadcast(message, true);
+  console.log(`\n🧪 TEST to ${telegramChatIds.size} subscribers`);
+  const sent = await tgBroadcast(`🔔 *TEST ALERT*\n\n✅ Your Telegram is working!`, true);
   res.json({ success: true, telegram: sent });
 });
 
@@ -378,30 +379,20 @@ app.get('/api/telegram/status', (req, res) => {
 });
 
 app.get('/api/price/:symbol', async (req, res) => {
-  const symbol = req.params.symbol.toUpperCase();
-  try {
-    const response = await axios.get(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}USDT`);
-    res.json({ symbol, price: parseFloat(response.data.price) });
-  } catch (err) {
-    res.status(404).json({ error: 'Symbol not found' });
-  }
+  const price = await fetchPrice(req.params.symbol);
+  res.json({ symbol: req.params.symbol, price });
 });
 
 app.post('/api/debug/check-now', async (req, res) => {
-  console.log('\n🔧 Manual alert check triggered...');
+  console.log('\n🔧 Manual alert check...');
   await checkAlerts();
   res.json({ success: true });
 });
 
 app.get('/api/health', (req, res) => {
-  let totalAlerts = 0;
-  for (const alerts of userAlerts.values()) totalAlerts += alerts.length;
-  res.json({ 
-    status: 'healthy', 
-    subscribers: telegramChatIds.size,
-    alerts: totalAlerts,
-    monitoring: 'active'
-  });
+  let total = 0;
+  for (const alerts of userAlerts.values()) total += alerts.length;
+  res.json({ status: 'healthy', subscribers: telegramChatIds.size, alerts: total });
 });
 
 // ============================================================
@@ -422,16 +413,14 @@ app.get('/risk', (req, res) => res.sendFile(path.join(__dirname, 'risk', 'risk.h
 app.get('/settings', (req, res) => res.sendFile(path.join(__dirname, 'settings', 'settings.html')));
 
 // ============================================================
-// START SERVER
+// START
 // ============================================================
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n🚀 Server running on port ${PORT}`);
+  console.log(`\n🚀 Server on port ${PORT}`);
   console.log(`📱 Subscribers: ${telegramChatIds.size}`);
   console.log(`🔔 Alerts: ${userAlerts.size}`);
-  console.log(`✅ Price monitoring active (every 10s)\n`);
+  console.log(`✅ Monitoring active\n`);
   
-  setTimeout(() => {
-    pollTelegram();
-  }, 2000);
+  setTimeout(() => pollTelegram(), 2000);
 });
