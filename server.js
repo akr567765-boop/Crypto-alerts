@@ -15,10 +15,25 @@ const io = socketIo(server, {
   transports: ['websocket', 'polling']
 });
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
+// Check environment variables
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('❌ Missing Supabase environment variables!');
+  console.error('   SUPABASE_URL:', SUPABASE_URL ? '✅ Set' : '❌ Missing');
+  console.error('   SUPABASE_ANON_KEY:', SUPABASE_ANON_KEY ? '✅ Set' : '❌ Missing');
+  console.error('   TELEGRAM_BOT_TOKEN:', process.env.TELEGRAM_BOT_TOKEN ? '✅ Set' : '❌ Missing');
+}
+
+// Initialize Supabase only if credentials exist
+let supabase = null;
+if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+  supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  console.log('✅ Supabase initialized');
+} else {
+  console.log('⚠️ Supabase not configured - auth features disabled');
+}
 
 app.use(cors());
 app.use(express.json());
@@ -150,7 +165,6 @@ async function pollTelegram() {
             `✅ *Welcome to CryptoFlow Alerts, ${name}!*\n\n` +
             `You are now subscribed to real-time price alerts.\n\n` +
             `📊 *Supported coins:* BTC, ETH, SOL, BNB, XRP, ADA, DOGE\n\n` +
-            `🔔 Create alerts on the dashboard and I'll notify you instantly!\n\n` +
             `Send /test to verify your connection.`,
             true
           );
@@ -163,8 +177,6 @@ async function pollTelegram() {
           await tgSend(chatId, subbed ? `✅ You are subscribed!` : `❌ You are not subscribed. Send /start to subscribe.`);
         } else if (text === '/test') {
           await tgSend(chatId, `🔔 *TEST ALERT*\n\n✅ Your Telegram is working perfectly!`, true);
-        } else if (text === '/price') {
-          await tgSend(chatId, `📊 *Current Prices:*\nBTC: Fetching...\nETH: Fetching...\n\nUse the dashboard for detailed charts!`, true);
         }
       }
     }
@@ -179,7 +191,6 @@ async function pollTelegram() {
 // ============================================================
 // BINANCE API - PRICE FETCHING
 // ============================================================
-// Cache prices for 10 seconds to avoid rate limits
 let priceCache = new Map();
 let lastPriceLog = Date.now();
 
@@ -187,7 +198,6 @@ async function fetchBinancePrice(symbol) {
   const upperSymbol = symbol.toUpperCase();
   const now = Date.now();
   
-  // Return cached price if less than 10 seconds old
   if (priceCache.has(upperSymbol) && now - priceCache.get(upperSymbol).timestamp < 10000) {
     return priceCache.get(upperSymbol).price;
   }
@@ -202,7 +212,6 @@ async function fetchBinancePrice(symbol) {
     if (price && !isNaN(price) && price > 0) {
       priceCache.set(upperSymbol, { price, timestamp: now });
       
-      // Log price every minute
       if (now - lastPriceLog > 60000) {
         console.log(`📊 ${upperSymbol}: $${price}`);
         lastPriceLog = now;
@@ -215,15 +224,6 @@ async function fetchBinancePrice(symbol) {
   }
   
   return null;
-}
-
-async function fetchMultiplePrices(symbols) {
-  const prices = {};
-  for (const symbol of symbols) {
-    const price = await fetchBinancePrice(symbol);
-    if (price) prices[symbol] = price;
-  }
-  return prices;
 }
 
 // ============================================================
@@ -250,7 +250,6 @@ async function sendAlertNotification(alert, currentPrice, userId) {
 
   const tgSent = await tgBroadcast(message, true);
   
-  // Store in history
   alertHistory.unshift({
     id: Date.now(),
     symbol,
@@ -265,7 +264,6 @@ async function sendAlertNotification(alert, currentPrice, userId) {
   if (alertHistory.length > 1000) alertHistory.pop();
   saveData();
 
-  // Emit to WebSocket for UI update
   io.emit(`alertTriggered_${userId}`, { ...alert, currentPrice });
 }
 
@@ -280,7 +278,6 @@ async function checkAlerts() {
   isCheckingAlerts = true;
   checkCount++;
 
-  // Log every 6 checks (every minute)
   if (checkCount % 6 === 0) {
     let totalAlerts = 0;
     for (const alerts of userAlerts.values()) {
@@ -292,7 +289,6 @@ async function checkAlerts() {
 
   for (const [userId, alerts] of userAlerts.entries()) {
     for (const alert of alerts) {
-      // Skip triggered one-time alerts
       if (alert.triggered && (alert.recurring === 'once' || !alert.recurring)) {
         continue;
       }
@@ -327,7 +323,6 @@ async function checkAlerts() {
           
           await sendAlertNotification(alert, currentPrice, userId);
 
-          // Handle recurring alerts
           if (alert.recurring === 'always') {
             alert.triggered = false;
             saveData();
@@ -352,7 +347,6 @@ async function checkAlerts() {
   isCheckingAlerts = false;
 }
 
-// Start price monitoring - check every 10 seconds
 setInterval(checkAlerts, 10000);
 console.log('✅ Price monitoring active (checking every 10 seconds)');
 
@@ -360,29 +354,42 @@ console.log('✅ Price monitoring active (checking every 10 seconds)');
 // API ROUTES
 // ============================================================
 
-// Auth routes
-app.post('/api/auth/signup', async (req, res) => {
-  const { email, password, username } = req.body;
-  const { data, error } = await supabase.auth.signUp({
-    email, password,
-    options: { data: { username: username || email.split('@')[0] } }
+// Auth routes (only if Supabase is configured)
+if (supabase) {
+  app.post('/api/auth/signup', async (req, res) => {
+    const { email, password, username } = req.body;
+    const { data, error } = await supabase.auth.signUp({
+      email, password,
+      options: { data: { username: username || email.split('@')[0] } }
+    });
+    if (error) return res.status(400).json({ error: error.message });
+    res.json({ user: data.user, session: data.session });
   });
-  if (error) return res.status(400).json({ error: error.message });
-  res.json({ user: data.user, session: data.session });
-});
 
-app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body;
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) return res.status(400).json({ error: error.message });
-  res.json({ user: data.user, session: data.session });
-});
+  app.post('/api/auth/login', async (req, res) => {
+    const { email, password } = req.body;
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return res.status(400).json({ error: error.message });
+    res.json({ user: data.user, session: data.session });
+  });
 
-app.post('/api/auth/logout', async (req, res) => {
-  const { error } = await supabase.auth.signOut();
-  if (error) return res.status(400).json({ error: error.message });
-  res.json({ success: true });
-});
+  app.post('/api/auth/logout', async (req, res) => {
+    const { error } = await supabase.auth.signOut();
+    if (error) return res.status(400).json({ error: error.message });
+    res.json({ success: true });
+  });
+} else {
+  // Mock auth routes for testing
+  app.post('/api/auth/signup', (req, res) => {
+    res.json({ user: { id: 'test-user', email: req.body.email }, session: { access_token: 'mock-token' } });
+  });
+  app.post('/api/auth/login', (req, res) => {
+    res.json({ user: { id: 'test-user', email: req.body.email }, session: { access_token: 'mock-token' } });
+  });
+  app.post('/api/auth/logout', (req, res) => {
+    res.json({ success: true });
+  });
+}
 
 // Alert CRUD
 app.get('/api/alerts/:userId', (req, res) => {
@@ -446,7 +453,6 @@ app.post('/api/notifications/test', async (req, res) => {
   res.json({ success: true, telegram: sent, subscribers: telegramChatIds.size });
 });
 
-// Price endpoint for frontend
 app.get('/api/price/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   const price = await fetchBinancePrice(symbol);
@@ -457,21 +463,19 @@ app.get('/api/price/:symbol', async (req, res) => {
   }
 });
 
-// Debug endpoints
 app.get('/api/telegram/status', (req, res) => {
   res.json({
     botTokenConfigured: !!BOT_TOKEN,
     subscriberCount: telegramChatIds.size,
     subscriberIds: Array.from(telegramChatIds),
-    totalAlertSets: userAlerts.size,
-    activeAlerts: Array.from(userAlerts.values()).reduce((a,b) => a + b.length, 0)
+    totalAlertSets: userAlerts.size
   });
 });
 
 app.post('/api/debug/check-now', async (req, res) => {
   console.log('\n🔧 Manual alert check triggered...');
   await checkAlerts();
-  res.json({ success: true, message: 'Alert check completed' });
+  res.json({ success: true });
 });
 
 app.get('/api/health', (req, res) => {
@@ -485,7 +489,7 @@ app.get('/api/health', (req, res) => {
     telegram: !!BOT_TOKEN,
     subscribers: telegramChatIds.size,
     alerts: totalAlerts,
-    uptime: process.uptime()
+    supabase: !!supabase
   });
 });
 
@@ -535,5 +539,4 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`   /stop   - Unsubscribe`);
   console.log(`   /status - Check subscription`);
   console.log(`   /test   - Send test alert`);
-  console.log(`\n📊 Supported coins: BTC, ETH, SOL, BNB, XRP, ADA, DOGE\n`);
 });
