@@ -1,7 +1,7 @@
 {
   "name": "cryptoflow-alerts",
   "version": "1.0.0",
-  "description": "Crypto price alert system with Telegram bot",
+  "description": "Crypto price alert system",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
