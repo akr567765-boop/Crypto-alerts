@@ -198,42 +198,6 @@
       color: var(--jade);
     }
 
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 500;
-    }
-    .status-badge.connected {
-      background: rgba(0,232,122,0.12);
-      color: var(--jade);
-      border: 1px solid rgba(0,232,122,0.2);
-    }
-    .status-badge.disconnected {
-      background: rgba(255,61,90,0.12);
-      color: var(--crimson);
-      border: 1px solid rgba(255,61,90,0.2);
-    }
-    .status-badge.checking {
-      background: rgba(255,255,255,0.05);
-      color: var(--t3);
-      border: 1px solid var(--border);
-    }
-    .status-dot-connected {
-      width: 8px;
-      height: 8px;
-      background: var(--jade);
-      border-radius: 50%;
-      animation: pulse 1.5s ease-in-out infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.5; transform: scale(0.8); }
-    }
-
     .telegram-btn {
       display: inline-flex;
       align-items: center;
@@ -255,28 +219,6 @@
     .telegram-btn:hover {
       background: rgba(0,232,122,0.12);
       transform: translateX(4px);
-    }
-
-    .refresh-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 16px;
-      background: var(--glass);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      color: var(--t2);
-      font-family: var(--sans);
-      font-size: 12px;
-      cursor: pointer;
-      transition: all 0.2s;
-      margin-top: 12px;
-      width: 100%;
-      justify-content: center;
-    }
-    .refresh-btn:hover {
-      border-color: var(--jade);
-      color: var(--jade);
     }
 
     .logout-btn {
@@ -409,23 +351,11 @@
           <span class="info-label">Bot Username</span>
           <span class="info-value">@Crypto0_flowbot</span>
         </div>
-        <div class="info-row">
-          <span class="info-label">Status</span>
-          <span class="info-value" id="telegramStatus">
-            <span class="status-badge checking">
-              <i class="fas fa-spinner fa-spin"></i> Checking...
-            </span>
-          </span>
-        </div>
         <a href="https://t.me/Crypto0_flowbot" target="_blank" class="telegram-btn">
           <i class="fab fa-telegram"></i>
           Open Bot
           <i class="fas fa-arrow-up-right-from-square" style="font-size: 10px;"></i>
         </a>
-        <button class="refresh-btn" onclick="checkTelegramStatus(true)">
-          <i class="fas fa-sync-alt"></i>
-          Refresh Status
-        </button>
       </div>
     </div>
 
@@ -472,41 +402,6 @@
     const formattedDate = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     document.getElementById('buildDate').textContent = formattedDate;
 
-    async function checkTelegramStatus(showToastMsg = false) {
-      const statusEl = document.getElementById('telegramStatus');
-      statusEl.innerHTML = `<span class="status-badge checking">
-        <i class="fas fa-spinner fa-spin"></i> Checking...
-      </span>`;
-      
-      try {
-        const res = await fetch('/api/telegram/status');
-        const data = await res.json();
-        
-        console.log('Telegram status:', data); // Debug log
-        
-        if (data.subscriberCount > 0) {
-          statusEl.innerHTML = `<span class="status-badge connected">
-            <span class="status-dot-connected"></span>
-            ✓ Connected (${data.subscriberCount} active subscriber${data.subscriberCount > 1 ? 's' : ''})
-          </span>`;
-          if (showToastMsg) showToast('✅ Telegram connected!');
-        } else {
-          statusEl.innerHTML = `<span class="status-badge disconnected">
-            <i class="fas fa-exclamation-circle"></i>
-            Not subscribed – click "Open Bot" and send /start
-          </span>`;
-          if (showToastMsg) showToast('⚠️ Not subscribed. Send /start to @Crypto0_flowbot');
-        }
-      } catch(e) {
-        console.error('Status check error:', e);
-        statusEl.innerHTML = `<span class="status-badge disconnected">
-          <i class="fas fa-exclamation-circle"></i>
-          Could not check status
-        </span>`;
-        if (showToastMsg) showToast('❌ Failed to check status');
-      }
-    }
-
     let toastTimer;
     function showToast(msg) {
       const el = document.getElementById('toast');
@@ -529,10 +424,6 @@
         window.location.href = '/';
       }
     };
-
-    // Check status on page load and every 30 seconds
-    checkTelegramStatus();
-    setInterval(() => checkTelegramStatus(false), 30000);
   </script>
 </body>
 </html>
