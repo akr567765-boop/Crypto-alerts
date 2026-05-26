@@ -198,6 +198,42 @@
       color: var(--jade);
     }
 
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .status-badge.connected {
+      background: rgba(0,232,122,0.12);
+      color: var(--jade);
+      border: 1px solid rgba(0,232,122,0.2);
+    }
+    .status-badge.disconnected {
+      background: rgba(255,61,90,0.12);
+      color: var(--crimson);
+      border: 1px solid rgba(255,61,90,0.2);
+    }
+    .status-badge.checking {
+      background: rgba(255,255,255,0.05);
+      color: var(--t3);
+      border: 1px solid var(--border);
+    }
+    .status-dot-connected {
+      width: 8px;
+      height: 8px;
+      background: var(--jade);
+      border-radius: 50%;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
     .telegram-btn {
       display: inline-flex;
       align-items: center;
@@ -213,6 +249,8 @@
       font-weight: 500;
       transition: all 0.2s;
       margin-top: 8px;
+      width: 100%;
+      justify-content: center;
     }
     .telegram-btn:hover {
       background: rgba(0,232,122,0.12);
@@ -240,17 +278,6 @@
     .logout-btn:hover {
       background: rgba(255,61,90,0.15);
       border-color: rgba(255,61,90,0.35);
-    }
-
-    .version-badge {
-      display: inline-block;
-      padding: 4px 10px;
-      background: var(--glass-2);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--t3);
     }
 
     .bottom-nav {
@@ -347,7 +374,7 @@
       </div>
     </div>
 
-    <!-- Telegram Settings -->
+    <!-- Telegram Alerts -->
     <div class="settings-card">
       <div class="card-header">
         <div class="card-title">
@@ -362,7 +389,11 @@
         </div>
         <div class="info-row">
           <span class="info-label">Status</span>
-          <span class="info-value" id="telegramStatus">Checking...</span>
+          <span class="info-value" id="telegramStatus">
+            <span class="status-badge checking">
+              <i class="fas fa-spinner fa-spin"></i> Checking...
+            </span>
+          </span>
         </div>
         <a href="https://t.me/Crypto0_flowbot" target="_blank" class="telegram-btn">
           <i class="fab fa-telegram"></i>
@@ -387,7 +418,7 @@
         </div>
         <div class="info-row">
           <span class="info-label">Build Date</span>
-          <span class="info-value">May 24, 2025</span>
+          <span class="info-value" id="buildDate">May 26, 2025</span>
         </div>
       </div>
     </div>
@@ -409,19 +440,34 @@
     const username = user.email?.split('@')[0] || user.user_metadata?.username || 'Trader';
     document.getElementById('avatarEl').textContent = username[0].toUpperCase();
     document.getElementById('userEmail').textContent = user.email || '—';
+    
+    // Set build date to today
+    const today = new Date();
+    const formattedDate = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    document.getElementById('buildDate').textContent = formattedDate;
 
     async function checkTelegramStatus() {
+      const statusEl = document.getElementById('telegramStatus');
       try {
         const res = await fetch('/api/telegram/status');
         const data = await res.json();
-        const statusEl = document.getElementById('telegramStatus');
+        
         if (data.subscriberCount > 0) {
-          statusEl.innerHTML = `<span style="color: var(--jade);">✓ Subscribed (${data.subscriberCount} active)</span>`;
+          statusEl.innerHTML = `<span class="status-badge connected">
+            <span class="status-dot-connected"></span>
+            ✓ Connected (${data.subscriberCount} active)
+          </span>`;
         } else {
-          statusEl.innerHTML = `<span style="color: var(--t3);">⚠ Not subscribed — click "Open Bot" and send /start</span>`;
+          statusEl.innerHTML = `<span class="status-badge disconnected">
+            <i class="fas fa-exclamation-circle"></i>
+            Not subscribed – click "Open Bot" and send /start
+          </span>`;
         }
       } catch(e) {
-        document.getElementById('telegramStatus').innerHTML = `<span style="color: var(--t3);">Could not check status</span>`;
+        statusEl.innerHTML = `<span class="status-badge disconnected">
+          <i class="fas fa-exclamation-circle"></i>
+          Could not check status
+        </span>`;
       }
     }
 
